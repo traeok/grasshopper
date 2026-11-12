@@ -15,6 +15,7 @@ import { buildMemory } from "./evidence.ts";
 import { detectSignals } from "./signals.ts";
 import { detectRedFlags } from "./red-flags.ts";
 import type { AnalysisStats, Profile } from "./types.ts";
+import { prepareEntries } from "./entries.ts";
 
 // Optimal-string-alignment distance includes adjacent transpositions (gti → git).
 function distance(a: string, b: string): number {
@@ -32,22 +33,16 @@ const ranked = (counts: Map<string, number>, cap: number) => [...counts].sort(([
 export function buildProfile(input: {
   entries: HistoryEntry[]; source: HistorySource; dumps: ShellDumps; ledger: Ledger;
   existing: StoredRecommendation[]; config: Config; env: Profile["environment"];
-  fresh: HistoryEntry[]; salt: string;
+  fresh: HistoryEntry[]; salt: string; which?: (name: string) => string | null;
 }): { profile: Profile; pseudonyms: PseudonymMap; stats: AnalysisStats; kept: NormEntry[]; ledgerNext: Ledger } {
   const { entries, source, dumps, config, salt } = input;
-  const ctx = { aliases: new Set(dumps.aliases.map(a => a.name)), functions: new Set(dumps.functions), shell: source.shell };
-  const customWords = new Set([...ctx.aliases, ...ctx.functions].map(name => source.shell === "powershell" ? name.toLowerCase() : name));
-  const knownWord = (word: string) => isKnownWord(word) || customWords.has(source.shell === "powershell" ? word.toLowerCase() : word);
-  const stats: AnalysisStats = { entries: entries.length, kept: 0, fresh: input.fresh.length, dropped: { secret: 0, "credential-command": 0, "registry-config": 0, "possible-password": 0, "leading-space": 0, oversized: 0, "user-rule": 0 }, secretRules: {}, pseudonyms: {}, grammarSkips: 0, payloadBytes: 0 };
+  const { ctx, classifications, kept, unknownCommands } = prepareEntries(entries, source.shell, dumps);
+  const stats: AnalysisStats = { entries: entries.length, kept: 0, fresh: input.fresh.length, dropped: { secret: 0, "credential-command": 0, "registry-config": 0, "possible-password": 0, "leading-space": 0, oversized: 0, "user-rule": 0 }, secretRules: {}, pseudonyms: {}, grammarSkips: 0, payloadBytes: 0, unknownCommands };
   const safe = (s: string) => { if (isSafeString(s)) return true; stats.grammarSkips++; return false; };
-  const classifications = entries.map(e => classifyEntry(e.text, { shell: source.shell, knownWords: knownWord }));
-  const kept: NormEntry[] = [];
-  entries.forEach((entry, i) => {
-    const classification = classifications[i]!;
+  for (const classification of classifications) {
     if (classification.drop) stats.dropped[classification.drop]++;
-    else kept.push(normalizeEntry(entry, ctx));
     if (classification.secretRule) stats.secretRules[classification.secretRule] = (stats.secretRules[classification.secretRule] ?? 0) + 1;
-  });
+  }
   stats.kept = kept.length;
   const pseudonyms = assignPseudonyms(kept, ctx.aliases, config.privacy.pseudonymMinCount);
   for (const p of Object.values(pseudonyms)) stats.pseudonyms[p.type] = (stats.pseudonyms[p.type] ?? 0) + 1;
@@ -117,8 +112,14 @@ export function buildProfile(input: {
     i = end;
   }
   const typoCounts = new Map<string, { typed: string; meant: string; n: number }>();
+  const executables = new Map<string, boolean>();
+  const which = input.which ?? Bun.which;
   const recordTypo = (typed: string, candidates: Iterable<string>, prefix = "") => {
     if (!/^[a-z][a-z-]{1,11}$/.test(typed)) return;
+    if (!prefix) {
+      if (!executables.has(typed)) executables.set(typed, which(typed) !== null);
+      if (executables.get(typed)) return;
+    }
     const limit = prefix ? 2 : typed.length <= 4 ? 1 : 2;
     const match = [...candidates].map(meant => ({ meant, d: distance(typed, meant) })).filter(m => m.d > 0 && m.d <= limit).sort((a, b) => a.d - b.d || a.meant.localeCompare(b.meant))[0];
     if (!match || !safe(prefix + match.meant)) return;

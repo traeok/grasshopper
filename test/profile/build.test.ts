@@ -9,12 +9,12 @@ import { buildProfile } from "../../src/profile/build.ts";
 import { detectEnvironment } from "../../src/profile/environment.ts";
 import { withTempHome } from "../helpers/env.ts";
 
-function build(entries: HistoryEntry[]) {
+function build(entries: HistoryEntry[], which: (name: string) => string | null = () => null) {
   const dumps = readShellDumps("bash");
   return buildProfile({ entries, source: { shell: "bash", file: "fixture" }, dumps,
     ledger: { firstUntimedDay: null, days: {} }, existing: [], config: ConfigSchema.parse({}),
     env: detectEnvironment("bash", dumps, name => ["npm", "winget"].includes(name) ? `/fixture/${name}` : null),
-    fresh: entries, salt: "fixture-salt" });
+    fresh: entries, salt: "fixture-salt", which });
 }
 
 describe("profile aggregation", () => {
@@ -41,6 +41,14 @@ describe("profile aggregation", () => {
     expect(stats.kept + Object.values(stats.dropped).reduce((a, b) => a + b, 0)).toBe(entries.length);
     expect(stats.payloadBytes).toBe(new TextEncoder().encode(JSON.stringify(profile)).length);
     expect(JSON.stringify(profile).length).toBeLessThanOrEqual(16_384);
+  }));
+
+  test("installed commands are not typos, while missing commands and subcommand typos remain", () => withTempHome(() => {
+    const entries = parseBash(new TextEncoder().encode("jj status\ngitt status\ngit sttaus\n".repeat(4)));
+    const { profile } = build(entries, name => ["jj", "sttaus"].includes(name) ? `/fixture/${name}` : null);
+    expect(profile.typos.map(row => row.typed)).not.toContain("jj");
+    expect(profile.typos).toContainEqual({ typed: "gitt", meant: "git", n: 4 });
+    expect(profile.typos).toContainEqual({ typed: "git sttaus", meant: "git status", n: 4 });
   }));
 
   test("counts runs, host usage, slow commands, and copies the ledger", () => withTempHome(() => {

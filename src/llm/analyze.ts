@@ -50,7 +50,7 @@ export async function prepareAnalysis({ source, slots }: { source: HistorySource
   const dumps = readShellDumps(source.shell);
   const env = detectEnvironment(source.shell, dumps, deps.which);
   const { fresh, next } = computeFresh(entries, getWatermark(`${source.shell}:${source.file}`), salt);
-  const built = buildProfile({ entries, source, dumps, ledger: loadLedger(), existing: listRecs({}), config, env, fresh, salt });
+  const built = buildProfile({ entries, source, dumps, ledger: loadLedger(), existing: listRecs({}), config, env, fresh, salt, which: deps.which });
   const messages = buildAnalysisMessages(built.profile, slots);
   return { messages, profile: built.profile, pseudonyms: built.pseudonyms, stats: built.stats, freshCount: fresh.length, ledgerNext: built.ledgerNext, watermarkNext: next };
 }

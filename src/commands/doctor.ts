@@ -7,6 +7,8 @@ import { ghopHome, initFile } from "../core/paths.ts";
 import { GhopError } from "../core/errors.ts";
 import { resolveSource } from "../history/source.ts";
 import { readHistory } from "../history/parse.ts";
+import { readShellDumps } from "../history/shell-dumps.ts";
+import { prepareEntries } from "../profile/entries.ts";
 import { OmpGateway } from "../llm/gateway.ts";
 import { ANALYZE_SYSTEM_PROMPT } from "../llm/prompts.ts";
 import { harvestSensitiveLiterals } from "../privacy/literals.ts";
@@ -14,6 +16,7 @@ import { listRecs } from "../recs/store.ts";
 import { INIT_VERSION } from "../shell/init.ts";
 import { rcPathFor } from "../shell/rc.ts";
 import { danger, leaf } from "../ui/style.ts";
+import { renderUnknownCommands } from "../ui/unknown-commands.ts";
 
 export async function runDoctor(options: { ping?: boolean } = {}): Promise<void> {
   const config = loadConfig();
@@ -37,6 +40,8 @@ export async function runDoctor(options: { ping?: boolean } = {}): Promise<void>
     const source = resolveSource({ persist: false });
     const entries = await readHistory(source, config.analysis.maxEntries);
     report(true, `History ${source.shell}: ${source.file} · ${entries.length} entries · timestamps ${entries.some(e => e.ts !== null) ? "yes" : "no"}`);
+    const { unknownCommands } = prepareEntries(entries, source.shell, readShellDumps(source.shell));
+    console.log(renderUnknownCommands(unknownCommands));
     const init = initFile(source.shell);
     const current = existsSync(init) && readFileSync(init, "utf8").replace(/^\uFEFF/, "").split("\n", 1)[0]?.startsWith(`# ghop-init v${INIT_VERSION} `);
     report(!!current, `Init ${current ? "current" : "missing/outdated"}. ${current ? init : "Run ghop setup"}`);

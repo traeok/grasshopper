@@ -117,6 +117,8 @@ ghop analyze --dry-run --shell bash --histfile ~/.bash_history
 
 Use `--shell zsh` with your Zsh history path, or `--shell powershell` with your PSReadLine history path, when appropriate. Dry runs print the request messages and filtering statistics without sending the request or saving analysis state. Background analysis requires consent and is gated by elapsed time and new history entries.
 
+Dry-run statistics (on stderr) and `ghop doctor` list the ten most-used unknown command names and counts locally. These names remain pseudonymized in model requests until explicitly allowlisted. Commands found on `PATH` are not reported as command-name typos; finding an executable does not automatically allowlist it.
+
 Configuration, recommendation state, analysis records, and placeholder mappings live under one local data directory:
 
 | Platform | Default directory |
@@ -134,11 +136,14 @@ ghop config get llm.model
 ghop config set analysis.auto false
 ghop config set daily.enabled false
 ghop config set automation.defaultMode guided
+ghop config allow jj
 ```
 
 `analysis.auto` disables background analysis; explicit `ghop analyze` remains available. `daily.enabled` controls the daily display. To skip shell integration entirely for a session, set `GHOP_DISABLE=1` before launching the shell (`$env:GHOP_DISABLE = '1'` in PowerShell).
 
 Configuration is validated. Use `ghop config unset <key>` to restore a setting's default. Privacy controls include `privacy.extraSensitiveLiterals`, `privacy.extraDropPatterns`, and `privacy.allowWords`; inspect the current configuration before changing them.
+
+`ghop config allow <words...>` adds public names to `privacy.allowWords`, preserving existing entries and removing duplicates. Dry-run and doctor output include a copyable command for the unknown names they find. Allow only names you are willing to send to the model; credential and secret filtering still applies.
 
 ## Development
 

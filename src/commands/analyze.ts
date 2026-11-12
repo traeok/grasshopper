@@ -6,12 +6,14 @@ import type { AnalysisStats } from "../profile/types.ts";
 import { log } from "../core/log.ts";
 import { PHRASES } from "../ui/art.ts";
 import { renderRow } from "../ui/render.ts";
+import { renderUnknownCommands } from "../ui/unknown-commands.ts";
 
 export function printStats(stats: AnalysisStats): void {
   console.error(`Entries: ${stats.entries} · kept: ${stats.kept} · fresh: ${stats.fresh}`);
   console.error(`Drops: ${JSON.stringify(stats.dropped)}`);
   console.error(`Pseudonyms: ${JSON.stringify(stats.pseudonyms)}`);
   console.error(`Grammar skips: ${stats.grammarSkips} · payload bytes: ${stats.payloadBytes}`);
+  console.error(renderUnknownCommands(stats.unknownCommands));
 }
 export function register(program: Command): void {
   program.command("analyze").description("Analyze a scrubbed summary of your shell history")

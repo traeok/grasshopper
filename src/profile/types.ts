@@ -73,4 +73,5 @@ export interface AnalysisStats {
   pseudonyms: Record<string, number>;
   grammarSkips: number;
   payloadBytes: number;
+  unknownCommands: { c: string; n: number }[]; // At most 10; local diagnostics only, never part of Profile.
 }
