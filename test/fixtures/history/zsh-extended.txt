@@ -1,0 +1,5 @@
+pwd
+: 1731000000:0;git status
+: 1731000060:12;printf 'first\
+second'
+: 1731000120:25;npm test

@@ -1,0 +1,6 @@
+git status
+
+cd ~/work/api
+npm run dev
+#not-a-timestamp
+printf 'hello world'

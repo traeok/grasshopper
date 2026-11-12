@@ -1,0 +1,10 @@
+git status
+pwd
+#1731000000
+printf 'first
+second
+third'
+#1731000060
+git diff
+#1731000120
+npm test

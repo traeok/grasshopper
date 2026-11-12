@@ -1,0 +1,57 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="384" viewBox="0 0 512 384" fill="none" role="img" aria-labelledby="title desc">
+  <title id="title">Grasshopper</title>
+  <desc id="desc">A green grasshopper with a leaf-shaped wing, folded jumping legs, and two sweeping antennae.</desc>
+  <defs>
+    <linearGradient id="wing" x1="158" y1="206" x2="220" y2="275" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#B5E48C"/>
+      <stop offset="1" stop-color="#7CB518"/>
+    </linearGradient>
+    <linearGradient id="head" x1="318" y1="153" x2="374" y2="216" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#B5E48C"/>
+      <stop offset="1" stop-color="#7CB518"/>
+    </linearGradient>
+    <linearGradient id="thigh" x1="208" y1="142" x2="281" y2="237" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#B5E48C"/>
+      <stop offset="0.55" stop-color="#99D98C"/>
+      <stop offset="1" stop-color="#7CB518"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Far-side legs sit behind the body. -->
+  <g stroke="#4F772D" stroke-linecap="round" stroke-linejoin="round">
+    <path d="m264 220-42-51-69 132h38" stroke-width="6"/>
+    <path d="m303 224-13 57-22 30h25" stroke-width="6"/>
+  </g>
+
+  <!-- Long antennae and the folded lower hind leg. -->
+  <g stroke-linecap="round" stroke-linejoin="round">
+    <path d="M344 163c-17-38-19-75-5-108" stroke="#4F772D" stroke-width="5"/>
+    <path d="M355 161c4-43 24-78 62-104" stroke="#4F772D" stroke-width="5"/>
+    <path d="m211 147-85 173h49" stroke="#4F772D" stroke-width="9"/>
+    <path d="m205 167-67 137" stroke="#7CB518" stroke-width="3"/>
+  </g>
+
+  <!-- Abdomen, thorax, and a single leaf-like forewing. -->
+  <path d="M98 261c53 25 147 14 211-38l-9-25-202 63Z" fill="#4F772D"/>
+  <path d="M282 196c1-24 22-40 42-31l22 43c-12 20-38 30-61 17l-3-29Z" fill="#7CB518"/>
+  <path d="M98 261c39-42 119-72 202-63-38 49-128 77-202 63Z" fill="url(#wing)"/>
+  <path d="M116 257c61-10 116-28 167-53" stroke="#4F772D" stroke-width="3" stroke-linecap="round"/>
+  <path d="m168 246 21-30m20 18 29-28m-29 28 37 5" stroke="#4F772D" stroke-opacity="0.4" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- Slender walking legs leave the jumping leg as the focal point. -->
+  <g stroke="#4F772D" stroke-linecap="round" stroke-linejoin="round">
+    <path d="m310 224 25 55-16 41h36" stroke-width="7"/>
+    <path d="m346 210 27 59 45 47h23" stroke-width="8"/>
+  </g>
+
+  <!-- Broad, tapered hind femur with a restrained highlight. -->
+  <path d="m281 229-52-87c-7-12-21-15-28-5-7 9-3 22 7 34l58 69c8 10 23 1 15-11Z" fill="#4F772D"/>
+  <path d="m278 230-51-85c-6-10-16-13-22-6-5 7-1 18 7 28l57 69c5 6 13 2 9-6Z" fill="url(#thigh)"/>
+  <path d="m213 145 46 68" stroke="#E4F3CE" stroke-width="4" stroke-linecap="round"/>
+
+  <!-- Alert, right-facing head. -->
+  <path d="M321 157c15-12 35-7 47 9l23 27c4 5 2 10-4 12l-26 12c-18 8-36-2-42-19-5-15-7-32 2-41Z" fill="url(#head)"/>
+  <path d="m365 204 13-5" stroke="#4F772D" stroke-width="3" stroke-linecap="round"/>
+  <circle cx="357" cy="174" r="9" fill="#28451E"/>
+  <circle cx="354.5" cy="171.5" r="2.5" fill="#E4F3CE"/>
+</svg>
