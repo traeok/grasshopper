@@ -67,7 +67,7 @@ ghop setup --shell powershell
 
 Setup installs into `$PROFILE.CurrentUserAllHosts`; PowerShell 7 and Windows PowerShell have separate profiles. Existing content is backed up before editing. Grasshopper does not change your execution policy; your policy must allow local profile scripts.
 
-The hook preserves your prompt and captures the active PSReadLine history path and edit mode. Grasshopper reads PSReadLine's persistent history, including multiline commands—not the session-only `Get-History` list. Preview a custom history path directly with:
+The hook preserves your prompt and captures the active PSReadLine history path and edit mode. Analysis reads PSReadLine's persistent history, including multiline commands; the hook supplements it with session execution metadata. Preview a custom history path directly with:
 
 ```powershell
 ghop analyze --dry-run --shell powershell --histfile (Get-PSReadLineOption).HistorySavePath
@@ -117,7 +117,7 @@ ghop analyze --dry-run --shell bash --histfile ~/.bash_history
 
 Use `--shell zsh` with your Zsh history path, or `--shell powershell` with your PSReadLine history path, when appropriate. Dry runs print the request messages and filtering statistics without sending the request or saving analysis state. Background analysis requires consent and is gated by elapsed time and new history entries.
 
-Dry-run statistics (on stderr) and `ghop doctor` list the ten most-used unknown command names and counts locally. These names remain pseudonymized in model requests until explicitly allowlisted. Commands found on `PATH` are not reported as command-name typos; finding an executable does not automatically allowlist it.
+Dry-run statistics (on stderr) and `ghop doctor` list the ten most-used unknown command names and counts locally. These names remain pseudonymized in model requests until explicitly allowlisted. Without recorded exit status, commands found on `PATH` are not reported as command-name typos. A recorded command-not-found exit (127) remains evidence even if the executable is installed later; observed corrections take precedence over equally close dictionary names. Finding an executable does not automatically allowlist it.
 
 Configuration, recommendation state, analysis records, and placeholder mappings live under one local data directory:
 
@@ -127,6 +127,22 @@ Configuration, recommendation state, analysis records, and placeholder mappings 
 | Windows | `%LOCALAPPDATA%\grasshopper` (or `AppData\Local\grasshopper` under your home) |
 
 The directory includes editable `config.json`, the SQLite database `ghop.db`, and generated shell files. Treat it as private: it contains local mappings and stored analysis data. Set `GRASSHOPPER_HOME` to use a different directory.
+
+### Command telemetry and Atuin
+
+The Bash, Zsh and PowerShell hooks record command start time, execution duration, exit status, session identity and a salted working-directory hash locally. Telemetry stores command fingerprints, not raw command text or working-directory paths, and enriches matching entries once the shell saves its history. Re-run `ghop setup` after upgrading to install the current hooks.
+
+The scrubbed profile uses this metadata for failed-command retries, exit-127 typo evidence, measured slow commands and workflows grouped by working directory. Project numbers are local to each profile; neither directory hashes nor session identifiers are sent. Sequence detection respects session boundaries, filtered-command gaps and the 600-second timestamp guard. Older history without telemetry still works with its available metadata.
+
+If an Atuin database exists, `history.source=auto` (the default) reads it instead of the default shell history. Explicit custom history paths take precedence. Atuin is opened read-only, including completed, non-deleted commands and their timing, exit and directory metadata; an unreadable selected database reports an error rather than silently falling back.
+
+```sh
+ghop analyze --dry-run --source atuin --shell zsh
+ghop analyze --dry-run --source shell --shell bash
+ghop config set history.source shell
+```
+
+Atuin discovery uses `ATUIN_DB_PATH`, then `${XDG_DATA_HOME:-~/.local/share}/atuin/history.db`. Use `--source atuin --histfile <database>` for a custom database. Setup accepts the same source options. `--shell` selects the command dialect, independently of the history source; `history.source=atuin` selects Atuin explicitly, and `auto` restores discovery.
 
 ## Configuration
 

@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { readShellDumps } from "../../src/history/shell-dumps.ts";
+import { parseCapture } from "../../src/history/telemetry.ts";
 import { detectEnvironment } from "../../src/profile/environment.ts";
 import { renderInit } from "../../src/shell/init.ts";
 import { withTempHome } from "../helpers/env.ts";
@@ -81,5 +82,92 @@ exit 0
       expect(new TextDecoder().decode(result.stderr)).toBe("");
       expect(result.exitCode).toBe(0);
     }
+  }), 30000);
+
+  test.skipIf(!binary)("captures PSReadLine timing and exit status while retaining history policy", () => withTempHome(home => {
+    const root = process.env.GRASSHOPPER_HOME!;
+    const bin = join(root, "bin"), child = join(home, "child");
+    mkdirSync(bin); mkdirSync(child);
+    const quote = (value: string) => `'${value.replaceAll("'", "''")}'`;
+    const init = join(root, "telemetry.ps1");
+    writeFileSync(init, "\uFEFF" + renderInit("powershell", root));
+    writeFileSync(join(bin, "ghop.ps1"), `
+if ($args[0] -eq 'record') {
+  [IO.File]::AppendAllText((Join-Path $env:GHOP_FIXTURE_ROOT 'records.jsonl'), (($input -join '') + [Environment]::NewLine), [Text.UTF8Encoding]::new($false))
+  [IO.File]::AppendAllText((Join-Path $env:GHOP_FIXTURE_ROOT 'argv.log'), ($args -join '|') + [Environment]::NewLine)
+}
+$global:LASTEXITCODE = 0
+`);
+    // Nested engine invocations populate Get-History but may omit its timing.
+    // Invoke the installed PSReadLine callback at acceptance, just as the
+    // console host does, without depending on an attached Windows console.
+    const script = `
+$ProgressPreference = 'SilentlyContinue'
+$ErrorActionPreference = 'Stop'
+Import-Module PSReadLine
+Set-PSReadLineOption -HistorySavePath ${quote(join(home, "history.txt"))}
+$global:priorCalls = 0
+Set-PSReadLineOption -AddToHistoryHandler {
+  param($line)
+  $global:priorCalls++
+  if ($line -eq 'ignored-sensitive') { return $false }
+  if ($line -eq "Write-Output 'memory-only'") { return [Microsoft.PowerShell.AddToHistoryOption]::MemoryOnly }
+  if ($line -eq "Write-Output 'done'") { return [Microsoft.PowerShell.AddToHistoryOption]::MemoryAndFile }
+  return $true
+}
+function global:prompt { 'original> ' }
+$global:LASTEXITCODE = 0
+. ${quote(init)}
+. ${quote(init)}
+Set-Location -LiteralPath ${quote(home)}
+function Invoke-CapturedLine {
+  param([string]$Line)
+  $handler = (Get-PSReadLineOption).AddToHistoryHandler
+  $decision = $handler.Invoke($Line)
+  if (-not $decision) { return }
+  $pipeline = [Management.Automation.PowerShell]::Create([Management.Automation.RunspaceMode]::CurrentRunspace)
+  $null = $pipeline.AddScript($Line)
+  $settings = [Management.Automation.PSInvocationSettings]::new()
+  $settings.AddToHistory = $true
+  try { $null = $pipeline.Invoke($null, $settings) } catch { }
+  $failed = $pipeline.HadErrors
+  $pipeline.Dispose()
+  $null = prompt (-not $failed) $global:LASTEXITCODE
+}
+Invoke-CapturedLine "Write-Output 'été'"
+Invoke-CapturedLine "Get-Item -LiteralPath 'missing-telemetry-file' -ErrorAction Stop"
+Invoke-CapturedLine 'Start-Sleep -Milliseconds 150'
+Invoke-CapturedLine ${quote(`Set-Location -LiteralPath ${quote(child)}`)}
+Invoke-CapturedLine "Write-Output 'done'"
+Invoke-CapturedLine 'ghop-telemetry-command-does-not-exist'
+$global:LASTEXITCODE = 23
+Invoke-CapturedLine ${quote(`& ${quote(binary!)} -NoLogo -NoProfile -NonInteractive -Command 'exit 23'`)}
+Invoke-CapturedLine "Get-Item -LiteralPath 'missing-after-native' -ErrorAction Stop"
+Invoke-CapturedLine "Write-Output 'memory-only'"
+Invoke-CapturedLine 'ignored-sensitive'
+$pendingAfterIgnore = $null -ne $global:__ghop_pending
+$nativeCode = $global:LASTEXITCODE
+@{ calls = $global:priorCalls; pending = $pendingAfterIgnore; prompt = (prompt); nativeCode = $nativeCode } | ConvertTo-Json -Compress
+exit 0
+`;
+    const before = Date.now() / 1000;
+    const result = Bun.spawnSync([binary!, "-NoLogo", "-NoProfile", "-ExecutionPolicy", "Bypass", "-NoExit", "-EncodedCommand", Buffer.from(script, "utf16le").toString("base64")], {
+      env: { ...process.env, PATH: bin + (process.platform === "win32" ? ";" : ":") + process.env.PATH, CI: "", GHOP_DISABLE: "", TERM: "xterm", GHOP_FIXTURE_ROOT: root },
+      stdin: "ignore", stdout: "pipe", stderr: "pipe", timeout: 20000,
+    });
+    expect(new TextDecoder().decode(result.stderr)).toBe("");
+    expect(result.exitCode).toBe(0);
+    expect(JSON.parse(new TextDecoder().decode(result.stdout).trim())).toEqual({ calls: 10, pending: false, prompt: "original> ", nativeCode: 23 });
+    const captures = readFileSync(join(root, "records.jsonl"), "utf8").trim().split(/\r?\n/).map(parseCapture);
+    expect(captures).toHaveLength(8);
+    expect(captures[0]!.text).toBe("Write-Output 'été'");
+    expect(captures.map(item => item.exitCode)).toEqual([0, 1, 0, 0, 0, 127, 23, 1]);
+    expect(captures[2]!.durationSec).toBeGreaterThanOrEqual(0.1);
+    expect(captures[2]!.ts).toBeGreaterThanOrEqual(Math.floor(before));
+    expect(captures[2]!.ts).toBeLessThanOrEqual(Date.now() / 1000);
+    expect(captures[3]!.cwd).toBe(home);
+    expect(captures[4]!.cwd).toBe(child);
+    expect(captures.every(item => item.sessionId === captures[0]!.sessionId)).toBe(true);
+    expect(readFileSync(join(root, "argv.log"), "utf8").trim().split(/\r?\n/)).toEqual(captures.map(() => "record|powershell"));
   }), 30000);
 });

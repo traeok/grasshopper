@@ -11,7 +11,7 @@ export const ConfigSchema = z.object({
   daily: z.object({ enabled: z.boolean().default(true), maxItems: positive.default(5) }).strict().prefault({}),
   automation: z.object({ enabled: z.boolean().default(true), defaultMode: z.enum(["self", "guided", "auto"]).default("self") }).strict().prefault({}),
   privacy: z.object({ pseudonymMinCount: positive.default(3), allowWords: z.array(z.string().regex(/^[a-z0-9][a-z0-9._-]{0,30}$/)).default([]), extraSensitiveLiterals: z.array(z.string()).default([]), extraDropPatterns: z.array(dropPattern).default([]) }).strict().prefault({}),
-  history: z.object({ shell: z.enum(["bash", "zsh", "powershell"]).nullable().default(null), file: z.string().nullable().default(null) }).strict().prefault({}),
+  history: z.object({ source: z.enum(["auto", "shell", "atuin"]).default("auto"), shell: z.enum(["bash", "zsh", "powershell"]).nullable().default(null), file: z.string().nullable().default(null) }).strict().prefault({}),
   ui: z.object({ emoji: z.boolean().default(true) }).strict().prefault({}),
 }).strict();
 export type Config = z.infer<typeof ConfigSchema>;

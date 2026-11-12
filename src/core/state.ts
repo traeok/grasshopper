@@ -5,7 +5,7 @@ import { GhopError } from "./errors.ts";
 const MetaSchemas = {
   installSalt: z.string().regex(/^[a-f0-9]{32}$/),
   consent: z.object({ granted: z.literal(true), at: z.string() }).strict().nullable(),
-  lastSource: z.object({ shell: z.enum(["bash", "zsh", "powershell"]), file: z.string() }).strict().nullable(),
+  lastSource: z.object({ shell: z.enum(["bash", "zsh", "powershell"]), file: z.string(), kind: z.literal("atuin").optional() }).strict().nullable(),
   lastAnalysisAt: z.string().nullable(),
   lastAnalysisId: z.string().nullable(),
   lastAnalysisError: z.string().nullable(),
@@ -17,7 +17,7 @@ export type MetaKey = keyof Metadata;
 
 const WatermarkSchema = z.object({
   tailHashes: z.array(z.string()),
-  lastTs: z.number().int().nullable(),
+  lastTs: z.number().nullable(),
 }).strict();
 
 export type Watermark = z.infer<typeof WatermarkSchema>;

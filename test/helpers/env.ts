@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { closeDb } from "../../src/core/db.ts";
 
-const ENV_KEYS = ["HOME", "USERPROFILE", "GRASSHOPPER_HOME", "GHOP_SHELL", "GHOP_HISTFILE", "GHOP_POWERSHELL", "GHOP_POWERSHELL_PROFILE", "SHELL", "APPDATA", "GIT_CONFIG_GLOBAL", "XDG_CONFIG_HOME", "ZDOTDIR"] as const;
+const ENV_KEYS = ["HOME", "USERPROFILE", "GRASSHOPPER_HOME", "GHOP_SHELL", "GHOP_HISTFILE", "GHOP_POWERSHELL", "GHOP_POWERSHELL_PROFILE", "SHELL", "APPDATA", "GIT_CONFIG_GLOBAL", "XDG_CONFIG_HOME", "XDG_DATA_HOME", "ATUIN_DB_PATH", "ZDOTDIR"] as const;
 
 /** Isolate home-dependent fixtures; callbacks may be synchronous or asynchronous. */
 export function withTempHome<T>(fn: (home: string) => T): T {
@@ -22,6 +22,8 @@ export function withTempHome<T>(fn: (home: string) => T): T {
   process.env.APPDATA = join(home, "AppData", "Roaming");
   process.env.GIT_CONFIG_GLOBAL = join(home, ".gitconfig");
   process.env.XDG_CONFIG_HOME = join(home, ".config");
+  process.env.XDG_DATA_HOME = join(home, ".local", "share");
+  delete process.env.ATUIN_DB_PATH;
   delete process.env.ZDOTDIR;
   delete process.env.GHOP_SHELL;
   delete process.env.GHOP_HISTFILE;

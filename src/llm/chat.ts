@@ -53,6 +53,9 @@ const ProfileSchema: z.ZodType<Profile> = z.object({
   functions: z.array(z.object({ f: z.string(), used: count })),
   typos: z.array(z.object({ typed: z.string(), meant: z.string(), n: count })),
   slow: z.array(z.object({ t: z.string(), n: count, avgSec: z.number().nonnegative() })),
+  retries: z.array(z.object({ from: z.string(), to: z.string(), n: count, succeeded: count })).default([]),
+  projects: z.array(z.object({ project: count, n: count, topCommands: z.array(z.object({ c: z.string(), n: count })),
+    sequences: z.array(z.object({ seq: z.array(z.string()), n: count })) })).default([]),
   signals: z.record(z.enum(["historyGrep", "retypedWithSudo", "lastArgReuse", "cdUp", "cdUpChains", "cdThenLs", "mkdirThenCd",
     "clearScreen", "exitCommand", "uselessCat", "grepRecursive", "findByName", "psGrep", "manLookups", "helpLookups",
     "consecutiveRepeats", "longPipelines", "cdHome", "gitStatus", "gitAddAll", "dirStack"]), count),
@@ -99,7 +102,7 @@ export function buildContextMessage(rec: StoredRecommendation, analysis: ChatAna
   const relevant = references(JSON.stringify([rec.title, rec.summary, rec.rationale, rec.steps, rec.action]));
   const profile = analysis.profile;
   const candidates = [...profile.templates, ...profile.aliasCandidates, ...profile.sequences, ...profile.paths,
-    ...profile.hosts, ...profile.aliases, ...profile.typos, ...profile.slow];
+    ...profile.hosts, ...profile.aliases, ...profile.typos, ...profile.slow, ...profile.retries, ...profile.projects];
   const matches = candidates.filter(item => [...references(JSON.stringify(item))].some(ref => relevant.has(ref))).slice(0, 20);
   return { role: "user", content: "Context (JSON):\n" + JSON.stringify({ recommendation, environment: profile.environment,
     evidence: { signals: profile.signals, redFlags: profile.redFlags, matches } }) };

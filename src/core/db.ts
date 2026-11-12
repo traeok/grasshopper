@@ -34,6 +34,14 @@ CREATE TABLE IF NOT EXISTS ledger_days (day TEXT PRIMARY KEY, timed INTEGER NOT 
 CREATE TABLE IF NOT EXISTS ledger_counts (
   day TEXT NOT NULL, key TEXT NOT NULL, n INTEGER NOT NULL, PRIMARY KEY (day, key)
 );
+CREATE TABLE IF NOT EXISTS command_telemetry (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  command_hash TEXT NOT NULL, shell TEXT NOT NULL, history_file TEXT NOT NULL,
+  ts REAL NOT NULL, duration_sec REAL NOT NULL, exit_code INTEGER NOT NULL,
+  cwd_hash TEXT NOT NULL, session_id TEXT NOT NULL,
+  boundary_count INTEGER NOT NULL, boundary_hash TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS command_telemetry_source ON command_telemetry(shell, history_file, ts, id);
 `;
 
 let cached: { file: string; db: Database } | undefined;

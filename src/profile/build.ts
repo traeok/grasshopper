@@ -16,6 +16,7 @@ import { detectSignals } from "./signals.ts";
 import { detectRedFlags } from "./red-flags.ts";
 import type { AnalysisStats, Profile } from "./types.ts";
 import { prepareEntries } from "./entries.ts";
+import { contiguous, rankSequences, telemetryPatterns } from "./telemetry.ts";
 
 // Optimal-string-alignment distance includes adjacent transpositions (gti → git).
 function distance(a: string, b: string): number {
@@ -95,16 +96,15 @@ export function buildProfile(input: {
     if (i + size > kept.length) continue;
     const seq = rendered.slice(i, i + size);
     if (!valid.slice(i, i + size).every(Boolean) || seq.every(t => t === seq[0])) continue;
-    let contiguous = true;
+    let contiguousWindow = true;
     for (let j = i + 1; j < i + size; j++) {
-      const previous = kept[j - 1]!.entry, current = kept[j]!.entry;
-      if (previous.ts !== null && current.ts !== null && current.ts - previous.ts > 600) contiguous = false;
+      if (!contiguous(kept[j - 1]!.entry, kept[j]!.entry)) { contiguousWindow = false; break; }
     }
-    if (!contiguous) continue;
+    if (!contiguousWindow) continue;
     const key = JSON.stringify(seq), row = grams.get(key) ?? { seq, n: 0 }; row.n++; grams.set(key, row);
   }
-  const frequent = [...grams.values()].filter(g => g.n >= 4);
-  const sequences = frequent.filter(g => g.seq.length === 3 || !frequent.some(t => t.seq.length === 3 && t.n >= g.n * .8 && (JSON.stringify(t.seq.slice(0, 2)) === JSON.stringify(g.seq) || JSON.stringify(t.seq.slice(1)) === JSON.stringify(g.seq)))).sort((a, b) => b.n * b.seq.length - a.n * a.seq.length || JSON.stringify(a.seq).localeCompare(JSON.stringify(b.seq))).slice(0, 15);
+  const sequences = rankSequences(grams.values());
+  const telemetry = telemetryPatterns(kept, rendered, valid, (a, b) => distance(a, b) <= (a.length <= 4 ? 1 : 2));
   const repeatMap = new Map<string, { t: string; runs: number; maxRun: number }>();
   for (let i = 0; i < rendered.length;) {
     let end = i + 1; while (end < rendered.length && rendered[end] === rendered[i]) end++;
@@ -114,20 +114,28 @@ export function buildProfile(input: {
   const typoCounts = new Map<string, { typed: string; meant: string; n: number }>();
   const executables = new Map<string, boolean>();
   const which = input.which ?? Bun.which;
-  const recordTypo = (typed: string, candidates: Iterable<string>, prefix = "") => {
+  const recordTypo = (typed: string, candidates: Iterable<string>, prefix = "", commandNotFound = false) => {
     if (!/^[a-z][a-z-]{1,11}$/.test(typed)) return;
-    if (!prefix) {
+    if (!prefix && !commandNotFound) {
       if (!executables.has(typed)) executables.set(typed, which(typed) !== null);
       if (executables.get(typed)) return;
     }
     const limit = prefix ? 2 : typed.length <= 4 ? 1 : 2;
-    const match = [...candidates].map(meant => ({ meant, d: distance(typed, meant) })).filter(m => m.d > 0 && m.d <= limit).sort((a, b) => a.d - b.d || a.meant.localeCompare(b.meant))[0];
+    const usage = prefix ? subs : commands;
+    const match = [...candidates].map(meant => ({ meant, d: distance(typed, meant) })).filter(m => m.d > 0 && m.d <= limit)
+      .sort((a, b) => a.d - b.d || (usage.get(prefix + b.meant) ?? 0) - (usage.get(prefix + a.meant) ?? 0) || a.meant.localeCompare(b.meant))[0];
     if (!match || !safe(prefix + match.meant)) return;
     const key = prefix + typed, row = typoCounts.get(key) ?? { typed: key, meant: prefix + match.meant, n: 0 }; row.n++; typoCounts.set(key, row);
   };
-  for (const e of kept) for (const c of e.commands) {
-    if (c.cmdKey === "<cmd>") recordTypo(c.rawCmd, COMMANDS);
-    if (["git", "npm", "docker", "kubectl"].includes(c.cmdKey)) {
+  for (const [i, e] of kept.entries()) for (const c of e.commands) {
+    if (c.cmdKey === "<cmd>" && (e.entry.exitCode == null || e.entry.exitCode === 127 && e.commands.length === 1)) {
+      const next = kept[i + 1], corrected = next?.commands.length === 1 ? next.commands[0]?.rawCmd : undefined;
+      const observed = e.entry.exitCode === 127 && next && next.entry.exitCode === 0 && corrected && COMMANDS.has(corrected) &&
+        contiguous(e.entry, next.entry) && e.entry.cwdHash === next.entry.cwdHash &&
+        e.entry.text.slice(c.rawCmd.length) === next.entry.text.slice(corrected.length);
+      recordTypo(c.rawCmd, observed ? [corrected] : COMMANDS, "", e.entry.exitCode === 127);
+    }
+    if (e.entry.exitCode !== 0 && ["git", "npm", "docker", "kubectl"].includes(c.cmdKey)) {
       const words = splitCommands(tokenize(e.entry.text, source.shell)).find(simple => simple.words[0]?.value === c.rawCmd)?.words;
       const first = words?.slice(1).find(w => !w.value.startsWith("-"))?.value;
       const known = SUBCOMMANDS[c.cmdKey];
@@ -151,6 +159,7 @@ export function buildProfile(input: {
     functions: Object.entries(pseudonyms).filter(([, p]) => p.type === "fn").map(([f, p]) => ({ f, used: kept.reduce((n, e) => n + e.commands.filter(c => c.tokens.some(t => t.literal?.type === "fn" && t.literal.value === p.value)).length, 0) })).filter(f => f.used >= 1 && safe(f.f)).sort((a, b) => b.used - a.used).slice(0, 20),
     typos: [...typoCounts.values()].filter(t => t.n >= 2).sort((a, b) => b.n - a.n).slice(0, 10),
     slow: [...templates].filter(([, a]) => a.timed >= 3 && a.seconds / a.timed >= 10).map(([t, a]) => ({ t, n: a.timed, avgSec: Math.round(a.seconds / a.timed) })).sort((a, b) => b.avgSec - a.avgSec).slice(0, 10),
+    ...telemetry,
     signals: detectSignals(kept, source.shell), redFlags: detectRedFlags(entries, classifications, environment), trends: computeTrends(ledgerNext, today), memory: [],
   };
   // Environment/trend strings are not derived from history, but are guarded too.
@@ -165,11 +174,11 @@ export function buildProfile(input: {
   sanitize(profile.environment); sanitize(profile.trends);
   profile.memory = buildMemory(profile, input.existing, pseudonyms, salt);
   const encoder = new TextEncoder();
-  for (const field of ["templates", "sequences", "aliases", "hosts", "paths"] as const) {
+  for (const field of ["templates", "sequences", "aliases", "hosts", "paths", "projects"] as const) {
     while (encoder.encode(JSON.stringify(profile)).length > 16_384 && profile[field].length) profile[field].splice(Math.floor(profile[field].length * .8));
   }
   // Other capped sections can dominate in a worst-case profile; keep the hard wire cap.
-  for (const field of ["memory", "aliasCandidates", "slow", "repeats", "typos", "functions", "topSubcommands", "topCommands"] as const) {
+  for (const field of ["memory", "aliasCandidates", "slow", "repeats", "typos", "functions", "topSubcommands", "topCommands", "retries"] as const) {
     while (encoder.encode(JSON.stringify(profile)).length > 16_384 && profile[field].length) profile[field].pop();
   }
   // Trimming may remove references that memory originally cited.

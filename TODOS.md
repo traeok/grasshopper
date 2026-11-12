@@ -2,7 +2,7 @@
 
 Improvements identified from a read of the source and one `analyze --dry-run`. The test suite was not run as part of this review.
 
-Suggested order for the remaining work: items 2 and 3 together, then 1.
+Suggested order for the remaining work: items 2 and 3 together.
 
 ## Fix first: unknown-command visibility and typo reporting (completed)
 
@@ -13,21 +13,19 @@ Previously, commands missing from the allowlist in `src/privacy/dictionary.ts` r
 "topCommands":[{"c":"<cmd>","n":8},{"c":"git","n":4}]
 ```
 
-- [x] **Typo check:** skip the typo when `Bun.which(typed)` resolves (`src/profile/build.ts`, `recordTypo`).
+- [x] **Typo check:** without recorded command-not-found evidence, skip the typo when `Bun.which(typed)` resolves (`src/profile/build.ts`, `recordTypo`).
 - [x] **Allowlist prompt:** show the top unknown commands in the `--dry-run` stats and `ghop doctor`, with a one-step add to `privacy.allowWords` via `ghop config allow <words...>`.
 - [x] **Dictionary gaps:** add `psql`, `mysql`, `sqlite3`, `redis-cli`, `ffmpeg`, `gpg`, `pandoc`, `adb`, `bazel`, `rclone`, `yt-dlp`, `nmap` and `mongosh`.
 
 ## Deeper signal
 
-### 1. Capture per-command telemetry in the hook
+### 1. Capture per-command telemetry in the hook (completed)
 
-Record exit code, duration, timestamp and a hashed working directory.
+The Bash, Zsh and PowerShell hooks now record metadata-only command fingerprints, exit status, measured duration, timestamps, session identity and salted working-directory hashes. Matching metadata enriches saved shell history without persisting raw commands or directory paths. Atuin's SQLite history is also available as a read-only source.
 
-Today duration comes only from zsh extended history, and PowerShell entries never have timestamps. So `slow` is empty outside zsh, trends fall back to `ingestion-days`, and the 600-second sequence-contiguity guard is skipped.
-
-- [ ] Record exit code, duration, timestamp and hashed working directory from the Bash, Zsh and PowerShell hooks.
-- [ ] Use the new data for fail-then-retry patterns, exact typos (exit 127), per-project workflows and slow-command detection on every shell.
-- [ ] Read Atuin's SQLite database as a history source for users who already have it.
+- [x] Record exit code, duration, timestamp and hashed working directory from the Bash, Zsh and PowerShell hooks.
+- [x] Use the new data for fail-then-retry patterns, exact typos (exit 127), per-project workflows and slow-command detection on every shell.
+- [x] Read Atuin's SQLite database as a history source for users who already have it.
 
 ### 2. Measure adoption
 

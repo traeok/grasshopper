@@ -149,4 +149,38 @@ describe("setup", () => {
     expect(existsSync(log)).toBe(false);
     expect(existsSync(initFile("bash"))).toBe(false);
   })));
+
+  test("--yes remembers an explicit Atuin database without reading it or granting consent", () => withTempHome(home => withSetupFixture(home, async () => {
+    const file = join(home, "selected-atuin.db");
+    await runSetup({ shell: "bash", source: "atuin", histfile: file, yes: true }, {
+      handshake: async () => ({ version: "fixture" }),
+      analyze: async () => { throw new Error("History must not be read"); },
+      outro: () => {},
+    });
+    expect(loadConfig().history).toEqual({ shell: null, source: "atuin", file });
+    expect(getMeta("lastSource")).toEqual({ shell: "bash", file, kind: "atuin" });
+    expect(getMeta("consent")).toBeNull();
+    expect(existsSync(file)).toBe(false);
+  })));
+
+  test("declined explicit-source preview never persists source configuration", () => withTempHome(home => withSetupFixture(home, async () => {
+    const file = join(home, "chosen-shell-history");
+    writeFileSync(file, "git diff\n".repeat(12));
+    await runSetup({ shell: "bash", source: "shell", histfile: file }, {
+      handshake: async () => ({ version: "fixture" }),
+      requireTTY: () => {},
+      selectShell: async initial => initial,
+      confirm: async () => false,
+      selectConsent: async () => "none",
+      analyze: async options => {
+        expect(options.source).toEqual({ shell: "bash", file });
+        expect(options.dryRun).toBe(true);
+        return runAnalysis(options, { which: () => null });
+      },
+      outro: () => {},
+    });
+    expect(loadConfig().history).toEqual({ shell: null, source: "auto", file: null });
+    expect(getMeta("lastSource")).toBeNull();
+    expect(getMeta("lastAnalysisAt")).toBeNull();
+  })));
 });

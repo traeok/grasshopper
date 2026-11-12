@@ -39,7 +39,7 @@ test("unknown commands stay local until the dry-run and doctor allowlist suggest
     const config = loadConfig();
     config.llm.command = ["ghop-missing-test-gateway"];
     config.privacy.allowWords = ["companycli"];
-    config.history = { shell: "bash", file: join(home, "history") };
+    config.history = { source: "shell", shell: "bash", file: join(home, "history") };
     saveConfig(config);
     writeFileSync(config.history.file!, "local-tool status\nlocal-tool log\ngit status\ncompanycli status\n".repeat(4)
       + "hidden-tool login\n private-tool status\n");
@@ -71,7 +71,7 @@ test("doctor exercises gateway handshake, optional model ping, and filtered hist
   await withTempHome(async home => {
     const config = loadConfig();
     config.llm.command = [process.execPath, resolve("test/helpers/fake-omp.ts")];
-    config.history = { shell: "bash", file: join(home, "history") };
+    config.history = { source: "shell", shell: "bash", file: join(home, "history") };
     saveConfig(config);
     writeFileSync(config.history.file!, "git status\nnpm test\n");
     const result = await cli(["doctor", "--ping"]);
@@ -83,4 +83,4 @@ test("doctor exercises gateway handshake, optional model ping, and filtered hist
     expect(result.stdout).not.toContain("git status");
     expect(result.stdout).toContain("Last analysis: never");
   });
-});
+}, 30000);

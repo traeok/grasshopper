@@ -58,6 +58,8 @@ export interface Profile {
   functions: { f: string; used: number }[]; // At most 20; used >= 1.
   typos: { typed: string; meant: string; n: number }[]; // At most 10.
   slow: { t: string; n: number; avgSec: number }[]; // At most 10; n >= 3, avgSec >= 10.
+  retries: { from: string; to: string; n: number; succeeded: number }[]; // At most 10; confirmed failures followed by related commands.
+  projects: { project: number; n: number; topCommands: { c: string; n: number }[]; sequences: { seq: string[]; n: number }[] }[]; // At most 10; profile-local directory IDs, never hashes.
   signals: Record<SignalName, number>;
   redFlags: { kind: RedFlagKind; n: number }[]; // Only positive counts.
   trends: Trends;

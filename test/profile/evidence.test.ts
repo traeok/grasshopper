@@ -31,6 +31,8 @@ function profile(): Profile {
     aliases: [{ a: "<alias#1>", expands: "git status", used: 0, fullFormUsed: 12 }],
     functions: [], typos: [{ typed: "gti", meant: "git", n: 2 }],
     slow: [{ t: "npm test", n: 3, avgSec: 15 }],
+    retries: [{ from: "git push", to: "sudo git push", n: 2, succeeded: 2 }],
+    projects: [{ project: 1, n: 10, topCommands: [{ c: "git", n: 10 }], sequences: [{ seq: ["git status", "git diff"], n: 4 }] }],
     signals: {
       historyGrep: 3, retypedWithSudo: 0, lastArgReuse: 0, cdUp: 0, cdUpChains: 0,
       cdThenLs: 0, mkdirThenCd: 0, clearScreen: 0, exitCommand: 0, uselessCat: 0,
@@ -66,6 +68,7 @@ test("evidence vocabulary contains every supported reference and only positive s
     "signal:historyGrep", "redFlag:force-push", "template:cd <path#1>", "template:git status",
     "sequence:cd <path#1> → git status", "alias:<alias#1>", "path:<path#1>", "host:<host#1>",
     "typo:gti", "slow:npm test", "trend:git status", "trend:npm install", "trend:bun test",
+    "retry:git push → sudo git push", "sequence:git status → git diff",
     "history:timestamps", "history:fileLimit", "history:ignoreSpace", "history:ignoreDups", "history:appendIncremental",
   ].sort());
   const collecting = profile();

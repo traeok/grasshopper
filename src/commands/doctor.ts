@@ -39,7 +39,7 @@ export async function runDoctor(options: { ping?: boolean } = {}): Promise<void>
   try {
     const source = resolveSource({ persist: false });
     const entries = await readHistory(source, config.analysis.maxEntries);
-    report(true, `History ${source.shell}: ${source.file} · ${entries.length} entries · timestamps ${entries.some(e => e.ts !== null) ? "yes" : "no"}`);
+    report(true, `History ${source.kind === "atuin" ? "Atuin / " : ""}${source.shell}: ${source.file} · ${entries.length} entries · timestamps ${entries.some(e => e.ts !== null) ? "yes" : "no"}`);
     const { unknownCommands } = prepareEntries(entries, source.shell, readShellDumps(source.shell));
     console.log(renderUnknownCommands(unknownCommands));
     const init = initFile(source.shell);

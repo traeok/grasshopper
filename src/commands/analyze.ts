@@ -20,8 +20,8 @@ export function register(program: Command): void {
     .option("--dry-run", "Print request messages without saving or sending")
     .option("--yes", "Grant consent to send the scrubbed summary")
     .option("--background", "Run without prompts or terminal output")
-    .option("--shell <bash|zsh|powershell>").option("--histfile <path>")
-    .action(async (options: { shell?: string; histfile?: string; dryRun?: boolean; yes?: boolean; background?: boolean }) => {
+    .option("--shell <bash|zsh|powershell>").option("--histfile <path>").option("--source <shell|atuin>", "History source (default: automatic detection)")
+    .action(async (options: { source?: string; shell?: string; histfile?: string; dryRun?: boolean; yes?: boolean; background?: boolean }) => {
       const execute = async () => {
         const source = resolveSource({ ...options, persist: !options.dryRun });
         const result = await runAnalysis({ source, dryRun: !!options.dryRun, yes: !!options.yes, background: !!options.background, interactive: !!process.stdin.isTTY && !!process.stdout.isTTY });

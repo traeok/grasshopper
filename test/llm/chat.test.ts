@@ -31,6 +31,7 @@ function profile(): Profile {
     topCommands: [{ c: "git", n: 30 }], topSubcommands: [{ c: "git status", n: 15 }],
     templates: [{ t: "git status", n: 15, len: 10 }], aliasCandidates: [], sequences: [], repeats: [], paths: [], hosts: [],
     aliases: [], functions: [], typos: [], slow: [], signals: detectSignals([]), redFlags: [{ kind: "force-push", n: 2 }],
+    retries: [], projects: [],
     trends: { available: false, reason: "collecting" }, memory: [],
   };
 }

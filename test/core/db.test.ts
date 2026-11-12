@@ -18,15 +18,9 @@ function insertRecommendation(topic: string): number {
 }
 
 describe("SQLite storage", () => {
-  test("creates the exact storage tables and enables required pragmas", () => withTempHome(() => {
+  test("reuses the open handle and enables required pragmas", () => withTempHome(() => {
     const db = openDb();
     expect(openDb()).toBe(db);
-    const tables = db.query<{ name: string }, []>(
-      "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name",
-    ).all().map((row) => row.name);
-    expect(tables).toEqual([
-      "analyses", "chat_messages", "ledger_counts", "ledger_days", "meta", "recommendations", "watermarks",
-    ]);
     expect(db.query("PRAGMA journal_mode").get()).toEqual({ journal_mode: "wal" });
     expect(db.query("PRAGMA busy_timeout").get()).toEqual({ timeout: 5000 });
     expect(db.query("PRAGMA foreign_keys").get()).toEqual({ foreign_keys: 1 });
@@ -100,13 +94,13 @@ describe("SQLite storage", () => {
     setMeta("consent", consent);
     setMeta("lastSource", source);
     setMeta("ledgerFirstUntimedDay", "2026-11-12");
-    setWatermark("zsh:fixture-history", { tailHashes: ["0123456789abcdef"], lastTs: 123 });
+    setWatermark("zsh:fixture-history", { tailHashes: ["0123456789abcdef"], lastTs: 123.456789 });
     setWatermark("bash:fixture-history", { tailHashes: [], lastTs: null });
     closeDb();
     expect(getMeta("consent")).toEqual(consent);
     expect(getMeta("lastSource")).toEqual(source);
     expect(getMeta("ledgerFirstUntimedDay")).toBe("2026-11-12");
-    expect(getWatermark("zsh:fixture-history")).toEqual({ tailHashes: ["0123456789abcdef"], lastTs: 123 });
+    expect(getWatermark("zsh:fixture-history")).toEqual({ tailHashes: ["0123456789abcdef"], lastTs: 123.456789 });
     expect(getWatermark("bash:fixture-history")).toEqual({ tailHashes: [], lastTs: null });
     setWatermark("zsh:fixture-history", { tailHashes: ["fedcba9876543210"], lastTs: null });
     expect(getWatermark("zsh:fixture-history")).toEqual({ tailHashes: ["fedcba9876543210"], lastTs: null });

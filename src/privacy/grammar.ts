@@ -2,6 +2,7 @@ import { COMMON_LONG_FLAGS, SAFE_ENV_NAMES, SAFE_LITERALS, SAFE_LITERAL_RES, TOO
 
 // Closed wire vocabulary: additions here require a corresponding schema field or public enum.
 export const SCHEMA_WORDS = new Set(`schema environment shell shellVersion platform keymap frameworks packageManagers installedTools history entries timestamps sizeLimit fileLimit ignoreSpace ignoreDups appendIncremental shared options window kept dropped spanDays topCommands topSubcommands c n templates t len aliasCandidates savedChars coveredBy sequences seq repeats runs maxRun paths p depth viaCd hosts h via aliases a expands used fullFormUsed functions f typos typed meant slow avgSec signals redFlags kind trends available reason basis recentDays baselineDays rising falling new recent baseline memory category status evidence tool
+retries from to succeeded projects project
 windows windows-gitbash macos linux wsl powershell bash zsh emacs vi unknown oh-my-zsh starship powerlevel10k autocd cdspell globstar histappend correct autopushd extendedglob ghop-profile/1 collecting ingestion-days
 workflow alias tip red-flag tool shortcut accepted implemented discarded low medium high
 path url host cmd fn arg ref pkg script var str num val glob flag subshell heredoc

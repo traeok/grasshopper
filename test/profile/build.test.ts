@@ -7,6 +7,7 @@ import { parseBash, parsePowerShell, type HistoryEntry } from "../../src/history
 import { readShellDumps } from "../../src/history/shell-dumps.ts";
 import { buildProfile } from "../../src/profile/build.ts";
 import { detectEnvironment } from "../../src/profile/environment.ts";
+import { validateProfile } from "../../src/privacy/egress.ts";
 import { withTempHome } from "../helpers/env.ts";
 
 function build(entries: HistoryEntry[], which: (name: string) => string | null = () => null) {
@@ -16,6 +17,64 @@ function build(entries: HistoryEntry[], which: (name: string) => string | null =
     env: detectEnvironment("bash", dumps, name => ["npm", "winget"].includes(name) ? `/fixture/${name}` : null),
     fresh: entries, salt: "fixture-salt", which });
 }
+
+test("exit status grounds command typos and distinguishes failures followed by retries", () => withTempHome(() => {
+  const entries: HistoryEntry[] = [
+    ...Array.from({ length: 2 }, () => [
+      { text: "gti status", exitCode: 127 }, { text: "git status", exitCode: 0 },
+      { text: "gitt status", exitCode: 0 }, { text: "gitt status", exitCode: 1 },
+      { text: "git push", exitCode: 1 }, { text: "sudo git push", exitCode: 0 },
+    ]).flat(),
+  ].map((entry, seq) => ({ ...entry, seq, ts: 1_790_000_000 + seq, durationSec: 1, cwdHash: "private-directory-hash", sessionId: "one-session" }));
+  const { profile } = build(entries, name => name === "gti" ? "/installed/today/gti" : null);
+  expect(profile.typos).toEqual([{ typed: "gti", meant: "git", n: 2 }]);
+  expect(profile.retries).toContainEqual({ from: "git push", to: "sudo git push", n: 2, succeeded: 2 });
+  expect(profile.retries.find(row => row.to === "git status")).toMatchObject({ n: 2, succeeded: 2 });
+  expect(profile.retries.some(row => row.from === "git status")).toBe(false);
+  validateProfile(profile);
+}));
+
+test("project workflows use private directory groups and measured duration on every shell", () => withTempHome(() => {
+  for (const shell of ["bash", "zsh", "powershell"] as const) {
+    const entries: HistoryEntry[] = [];
+    for (const [cwdHash, commands] of [["private-hash-a", ["git status", "npm test"]], ["private-hash-b", ["git diff", "npm run build"]]] as const) {
+      for (let run = 0; run < 4; run++) for (const text of commands) {
+        const seq = entries.length;
+        entries.push({ text, seq, ts: 1_790_000_000 + seq * 30, durationSec: 20, exitCode: 0, cwdHash, sessionId: cwdHash });
+      }
+    }
+    const dumps = readShellDumps(shell);
+    const { profile } = buildProfile({ entries, source: { shell, file: "fixture" }, dumps,
+      ledger: { firstUntimedDay: null, days: {} }, existing: [], config: ConfigSchema.parse({}),
+      env: detectEnvironment(shell, dumps, () => null), fresh: entries, salt: "fixture-salt", which: () => null });
+    expect(profile.projects).toHaveLength(2);
+    expect(profile.projects[0]).toMatchObject({ project: 1, n: 8, sequences: [{ seq: ["git status", "npm test"], n: 4 }] });
+    expect(profile.projects[1]).toMatchObject({ project: 2, n: 8, sequences: [{ seq: ["git diff", "npm run build"], n: 4 }] });
+    expect(profile.slow).toContainEqual({ t: "npm test", n: 4, avgSec: 20 });
+    expect(profile.environment.history.timestamps).toBe(true);
+    const wire = JSON.stringify(profile);
+    expect(wire).not.toContain("private-hash");
+    expect(wire).not.toContain("sessionId");
+    validateProfile(profile);
+  }
+}));
+
+test("retry and workflow detection do not cross sessions, idle gaps, or filtered commands", () => withTempHome(() => {
+  for (const boundary of ["session", "idle", "filtered", "directory"] as const) {
+    const entries: HistoryEntry[] = [];
+    for (let run = 0; run < 4; run++) {
+      const start = entries.length;
+      entries.push({ text: "git push", seq: start, ts: 1_790_000_000 + run * 2000, durationSec: 1, exitCode: 1, cwdHash: "a", sessionId: `start-${run}` });
+      if (boundary === "filtered") entries.push({ text: " hidden-command", seq: entries.length, ts: null, durationSec: null });
+      entries.push({ text: "git push --force", seq: entries.length, ts: 1_790_000_000 + run * 2000 + (boundary === "idle" ? 601 : 1),
+        durationSec: 1, exitCode: 0, cwdHash: boundary === "directory" ? "b" : "a", sessionId: boundary === "session" ? `end-${run}` : `start-${run}` });
+    }
+    const { profile } = build(entries);
+    expect(profile.retries).toEqual([]);
+    expect(profile.projects.every(project => project.sequences.length === 0)).toBe(true);
+    if (boundary !== "directory") expect(profile.sequences).toEqual([]);
+  }
+}));
 
 describe("profile aggregation", () => {
   test("compresses mixed fixture history without carrying its literals", () => withTempHome(async () => {

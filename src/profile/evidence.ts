@@ -17,6 +17,10 @@ export function evidenceVocabulary(profile: Profile): Set<string> {
   for (const { h } of profile.hosts) vocabulary.add(`host:${h}`);
   for (const { typed } of profile.typos) vocabulary.add(`typo:${typed}`);
   for (const { t } of profile.slow) vocabulary.add(`slow:${t}`);
+  for (const { from, to } of profile.retries ?? []) vocabulary.add(`retry:${from} → ${to}`);
+  for (const project of profile.projects ?? []) {
+    for (const { seq } of project.sequences) vocabulary.add(`sequence:${seq.join(" → ")}`);
+  }
   if (profile.trends.available) {
     for (const items of [profile.trends.rising, profile.trends.falling, profile.trends.new]) {
       for (const { c } of items) vocabulary.add(`trend:${c}`);

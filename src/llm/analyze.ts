@@ -49,7 +49,7 @@ export async function prepareAnalysis({ source, slots }: { source: HistorySource
   const entries = await readHistory(source, config.analysis.maxEntries);
   const dumps = readShellDumps(source.shell);
   const env = detectEnvironment(source.shell, dumps, deps.which);
-  const { fresh, next } = computeFresh(entries, getWatermark(`${source.shell}:${source.file}`), salt);
+  const { fresh, next } = computeFresh(entries, getWatermark(`${source.kind === "atuin" ? "atuin:" : ""}${source.shell}:${source.file}`), salt);
   const built = buildProfile({ entries, source, dumps, ledger: loadLedger(), existing: listRecs({}), config, env, fresh, salt, which: deps.which });
   const messages = buildAnalysisMessages(built.profile, slots);
   return { messages, profile: built.profile, pseudonyms: built.pseudonyms, stats: built.stats, freshCount: fresh.length, ledgerNext: built.ledgerNext, watermarkNext: next };
@@ -264,7 +264,7 @@ async function executeAnalysis(options: AnalysisOptions, deps: AnalysisDeps): Pr
       setMeta("lastAnalysisAt", at);
       setMeta("lastAnalysisId", id);
       setMeta("lastAnalysisError", null);
-      setWatermark(`${source.shell}:${source.file}`, prepared!.watermarkNext);
+      setWatermark(`${source.kind === "atuin" ? "atuin:" : ""}${source.shell}:${source.file}`, prepared!.watermarkNext);
       saveLedger(prepared!.ledgerNext);
       pruneAnalyses();
       return rows;

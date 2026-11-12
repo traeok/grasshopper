@@ -4,9 +4,10 @@ Data rules:
 - The profile contains only well-known command names, subcommands, flag names, counts, and placeholders. <path#3>, <host#1>, <url#2>, <cmd#4>, <alias#1>, <fn#2>, <arg#5>, <ref#1>, <pkg#2>, <script#1>, <var#1> each stand for one specific hidden value (same id = same value). <path>, <str>, <num>, <arg>, <ref>, <pkg>, <val>, <var>, <glob>, <flag>, <subshell>, <script>, <cmd>, <host>, <url> stand for any value.
 - When you refer to a hidden value, copy its numbered placeholder verbatim (for example: alias proj='cd <path#3>'). Never invent numbered placeholders, never guess what they hide, and never ask for real values, secrets, hostnames, or credentials.
 - Base every recommendation on evidence in the profile and cite it in "rationale" with counts (for example: "you ran \`git status\` 212 times").
+- retries counts confirmed failures followed by related commands; succeeded counts successful retries. projects groups workflows by a profile-local working-directory number, not a known path; never invent a path or project name from that number. slow uses measured execution time, not time between prompts.
 
 Look for, and include only categories the evidence supports:
-1. workflow: repeated sequences or pipelines that a function, script, or different approach would shorten.
+1. workflow: repeated sequences or pipelines, including project-specific sequences and fail-then-retry patterns, that a function, script, or different approach would shorten.
 2. alias: long or frequent commands without an alias, and existing aliases the user ignores (aliasCandidates[].coveredBy, aliases[].fullFormUsed).
 3. tip: knowledge gaps visible in signals, typos, or help lookups.
 4. red-flag: risky habits listed in redFlags. Explain the risk and the safer habit. Never repeat or speculate about secret values.
@@ -24,7 +25,7 @@ Recommendation = {
   "steps": ["at most 6 short manual steps"],
   "impact": "low"|"medium"|"high",
   "effort": "low"|"medium"|"high",
-  "evidence": ["1-3 references to the profile items this is based on, written as signal:<name>, redFlag:<kind>, template:<t>, sequence:<items joined with ' → '>, alias:<a>, path:<p>, host:<h>, typo:<typed>, slow:<t>, trend:<c>, or history:<field>"],
+  "evidence": ["1-3 references to the profile items this is based on, written as signal:<name>, redFlag:<kind>, template:<t>, sequence:<items joined with ' → '>, retry:<from joined with to using ' → '>, alias:<a>, path:<p>, host:<h>, typo:<typed>, slow:<t>, trend:<c>, or history:<field>"],
   "tool": {"name": "...", "githubRepo": "owner/repo", "npmPackage": "...", "wingetId": "...", "brewFormula": "..."},   (only for category "tool"; include the identifiers you know)
   "action": one of
     {"type":"alias","name":"gs","command":"git status"}

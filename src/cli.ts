@@ -20,6 +20,7 @@ import { register as registerDaily } from "./commands/daily.ts";
 import { register as registerNotify } from "./commands/notify.ts";
 import { register as registerDoctor } from "./commands/doctor.ts";
 import { register as registerConfig } from "./commands/config.ts";
+import { register as registerRecord } from "./commands/record.ts";
 
 if (process.platform !== "win32") process.umask(0o077);
 const program = new Command().name("ghop").description("A private shell-history mentor").version(VERSION);
@@ -52,6 +53,7 @@ try {
   registerNotify(program);
   registerDoctor(program);
   registerConfig(program);
+  registerRecord(program);
   await program.parseAsync();
 } catch (err) {
   if (err instanceof GhopError) {

@@ -1,11 +1,16 @@
 import { GhopError } from "../core/errors.ts";
 import type { HistorySource } from "./source.ts";
+import { readAtuinHistory } from "./atuin.ts";
+import { enrichHistory } from "./telemetry.ts";
 
 export interface HistoryEntry {
   text: string;
   ts: number | null;
   durationSec: number | null;
   seq: number;
+  exitCode?: number | null;
+  cwdHash?: string | null;
+  sessionId?: string | null;
 }
 
 function decodedLines(bytes: Uint8Array): string[] {
@@ -106,6 +111,7 @@ export function parsePowerShell(bytes: Uint8Array): HistoryEntry[] {
 }
 
 export async function readHistory(source: HistorySource, maxEntries: number): Promise<HistoryEntry[]> {
+  if (source.kind === "atuin") return readAtuinHistory(source.file, maxEntries);
   let bytes: Uint8Array;
   try {
     bytes = await Bun.file(source.file).bytes();
@@ -116,5 +122,5 @@ export async function readHistory(source: HistorySource, maxEntries: number): Pr
     throw error;
   }
   const entries = source.shell === "bash" ? parseBash(bytes) : source.shell === "powershell" ? parsePowerShell(bytes) : parseZsh(bytes);
-  return entries.slice(Math.max(0, entries.length - maxEntries)).map((entry, seq) => ({ ...entry, seq }));
+  return enrichHistory(source, entries.slice(Math.max(0, entries.length - maxEntries)).map((entry, seq) => ({ ...entry, seq })));
 }
