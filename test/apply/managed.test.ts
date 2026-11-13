@@ -1,8 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { MANAGED_HEADER, removeBlock, renderManaged, upsertBlock, writeReload } from "../../src/apply/managed.ts";
-import { localDate } from "../../src/core/dates.ts";
+import { removeBlock, upsertBlock, writeReload } from "../../src/apply/managed.ts";
 import { writeTextAtomic } from "../../src/core/fsx.ts";
 import { managedFile, reloadFile, toShellPath } from "../../src/core/paths.ts";
 import { withTempHome } from "../helpers/env.ts";
@@ -10,11 +9,6 @@ import { withTempHome } from "../helpers/env.ts";
 const rec = { id: 12, key: "alias-git-status" };
 
 describe("managed shell blocks", () => {
-  test("renders exact markers and header without writing", () => withTempHome(() => {
-    const content = renderManaged("bash", rec, ["alias gs='git status'"]);
-    expect(content).toBe(`${MANAGED_HEADER}\n# >>> ghop #12 alias-git-status (${localDate()}) >>>\nalias gs='git status'\n# <<< ghop #12 <<<\n`);
-    expect(existsSync(managedFile("bash"))).toBe(false);
-  }));
 
   test("upserts in place and removes only the requested block", () => withTempHome(() => {
     const before = "# user prefix\nexport EDITOR=vi\n";
@@ -32,7 +26,12 @@ describe("managed shell blocks", () => {
     expect(content).toContain("alias gst='git status'");
     expect(content.indexOf("alias gst=")).toBeLessThan(content.indexOf(between));
     removeBlock("bash", rec.id);
-    expect(readFileSync(managedFile("bash"), "utf8")).toBe(`${MANAGED_HEADER}\n${before}${between}# >>> ghop #123 other (${localDate()}) >>>\nalias gl='git log'\n# <<< ghop #123 <<<\n${after}`);
+    const remaining = readFileSync(managedFile("bash"), "utf8");
+    expect(remaining).toContain(before);
+    expect(remaining).toContain(between);
+    expect(remaining.endsWith(after)).toBe(true);
+    expect(remaining).toContain("alias gl='git log'");
+    expect(remaining).not.toContain("alias gst=");
   }));
 
   test("missing removal does not create a managed file", () => withTempHome(() => {

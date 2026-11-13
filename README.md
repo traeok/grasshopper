@@ -97,6 +97,8 @@ Replace `<id>` with a recommendation ID from `ghop list`. Acceptance supports th
 
 Automatic changes are available only for supported, validated actions—not arbitrary model-generated commands. With `--mode auto`, `--yes` explicitly confirms the previewed change.
 
+Auto-accepting an alias also writes a literal lookup entry into the managed shell file. After you type its long form, the next prompt prints one line such as `ghop: use gs instead of git status`, without an extra process or model request. Matching includes trailing arguments; the longest matching form wins. Bash, Zsh and PowerShell use the same history-policy exclusions as command telemetry. Reloading after acceptance or undo refreshes the lookup, including removing undone reminders.
+
 | Command | Purpose |
 | --- | --- |
 | `ghop discard <id> [--reason <reason>]` | Dismiss a topic and optionally record structured feedback. |

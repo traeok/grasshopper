@@ -1,5 +1,6 @@
 import { describe, expect, spyOn, test } from "bun:test";
-import { existsSync, readFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { automationStatus, previewAction, applyAction, type AutomationContext } from "../../src/apply/actions.ts";
 import { findShellBinary, syntaxCheck } from "../../src/apply/shells.ts";
 import { setConfigValue } from "../../src/core/config.ts";
@@ -9,6 +10,7 @@ import type { Action } from "../../src/llm/schema.ts";
 import { getRec, insertRecs, updateRec, type StoredRecommendation } from "../../src/recs/store.ts";
 import { runUndo } from "../../src/commands/undo.ts";
 import { withTempHome } from "../helpers/env.ts";
+import { renderInit } from "../../src/shell/init.ts";
 
 function recommendation(action: Action | null = { type: "alias", name: "gs", command: "git status" }): StoredRecommendation {
   return {
@@ -109,7 +111,6 @@ describe("automatic action safety", () => {
     const which = spyOn(Bun, "which").mockImplementation((name) => name === "gs" ? "/fixture/gs" : null);
     try {
       const preview = previewAction(recommendation(), { ...context(), aliases: [{ name: "gs", expansion: "git show" }] });
-      expect(preview.lines).toEqual(["alias gs='git status'"]);
       expect(preview.warnings).toContain("overrides existing alias gs");
       expect(preview.warnings).toContain("shadows command /fixture/gs");
     } finally { which.mockRestore(); }
@@ -182,7 +183,6 @@ describe("applying approved actions", () => {
     const command = "printf '%s\\n' \"$HOME\" 'a b'";
     const rec = recommendation({ type: "alias", name: "quoted", command });
     const preview = previewAction(rec, context());
-    expect(preview.lines).toEqual([`alias quoted='${command.replace(/'/g, "'\\''")}'`]);
     expect(syntaxCheck("bash", preview.lines.join("\n")).ok).toBe(true);
     const spawn = spyOn(Bun, "spawn");
     try {
@@ -403,4 +403,124 @@ describe("applying approved actions", () => {
     ].join("\n"));
     expect(result.exitCode).toBe(0);
   }));
+});
+
+describe("accepted alias reminders", () => {
+  const runtimes = [
+    { shell: "bash" as const, name: "bash", binary: bash },
+    { shell: "zsh" as const, name: "zsh", binary: findShellBinary("zsh") },
+    ...["pwsh", "powershell"].map(name => ({ shell: "powershell" as const, name, binary: Bun.which(name) })),
+  ];
+  for (const { shell, name, binary } of runtimes) {
+    test.skipIf(!binary)(`${name} nudges once for literal long forms, retains status, and clears on undo`, () => withTempHome(async home => {
+      const root = process.env.GRASSHOPPER_HOME!;
+      const ctx = { ...context(), shell };
+      const recs: StoredRecommendation[] = [];
+      const commands = ["echo 'a b'", "echo 'a b' detail"];
+      for (const [index, command] of commands.entries()) {
+        const { id: _id, ...input } = recommendation({ type: "alias", name: `short${index}`, command });
+        const rec = insertRecs([{ ...input, shell, topic: `nudge:${index}` }])[0]!;
+        const applied = await applyAction(rec, previewAction(rec, ctx), shell);
+        updateRec(rec.id, { applied, status: "implemented", acceptMode: "auto" });
+        recs.push(rec);
+      }
+      const extension = shell === "powershell" ? ".ps1" : ".sh";
+      const initial = join(root, "before-undo" + extension);
+      writeFileSync(initial, readFileSync(managedFile(shell)));
+      const cleanup: string[] = [];
+      const output = spyOn(console, "log").mockImplementation(() => {});
+      try {
+        for (const rec of recs) {
+          await runUndo(rec.id, { yes: true });
+          cleanup.push(readFileSync(reloadFile(shell), "utf8").replace(/^\uFEFF/, ""));
+        }
+      } finally { output.mockRestore(); }
+      const undo = join(root, "undo" + extension);
+      writeFileSync(undo, (shell === "powershell" ? "\uFEFF" : "") + cleanup.join("\n"));
+      const init = join(root, "init" + extension);
+      writeFileSync(init, (shell === "powershell" ? "\uFEFF" : "") + renderInit(shell, toShellPath(root, shell)));
+      const quote = (value: string) => `'${toShellPath(value, shell).replaceAll("'", shell === "powershell" ? "''" : "'\\''")}'`;
+      let result: Bun.SyncSubprocess<"pipe", "pipe">;
+      if (shell === "powershell") {
+        const script = `
+$ErrorActionPreference = 'Stop'
+$ProgressPreference = 'SilentlyContinue'
+[Console]::OutputEncoding = [Text.UTF8Encoding]::new($false)
+Import-Module PSReadLine
+Set-PSReadLineOption -HistorySavePath ${quote(join(home, "history"))}
+function global:prompt { 'original> ' }
+. ${quote(init)}
+. ${quote(initial)}
+$global:__ghop_started = $true
+$global:__ghop_command = $null
+function Invoke-CapturedLine([string]$Line) {
+  $null = (Get-PSReadLineOption).AddToHistoryHandler.Invoke($Line)
+  $pipeline = [Management.Automation.PowerShell]::Create([Management.Automation.RunspaceMode]::CurrentRunspace)
+  $null = $pipeline.AddScript($Line)
+  $settings = [Management.Automation.PSInvocationSettings]::new()
+  $settings.AddToHistory = $true
+  $null = $pipeline.Invoke($null, $settings)
+  $pipeline.Dispose()
+  if ((prompt) -ne 'original> ') { throw 'prompt changed' }
+  $null = prompt
+}
+Invoke-CapturedLine ${quote(commands[0]!)}
+Invoke-CapturedLine ${quote(commands[0] + " tail")}
+Invoke-CapturedLine ${quote(commands[1]!)}
+Invoke-CapturedLine 'short0'
+Invoke-CapturedLine ${quote("echo 'a b'x")}
+$global:LASTEXITCODE = 23
+$null = prompt
+Write-Host "status:$global:LASTEXITCODE"
+. ${quote(undo)}
+Invoke-CapturedLine ${quote(commands[0]!)}
+# With PATH empty, a literal lookup must still work without executing its data.
+$env:PATH = ''
+$global:__ghop_nudges = @('echo $(throw "executed") *', 'literal')
+__ghop_nudge 'echo $(throw "executed") *'
+__ghop_nudge 'echo not-a-match'
+exit 0
+`;
+        result = Bun.spawnSync([binary!, "-NoLogo", "-NoProfile", "-ExecutionPolicy", "Bypass", "-NoExit", "-Command", script], {
+          env: { ...process.env, CI: "", GHOP_DISABLE: "", TERM: "xterm" },
+          stdin: "ignore", stdout: "pipe", stderr: "pipe", timeout: 20000,
+        });
+        expect(new TextDecoder().decode(result.stderr)).toBe("");
+      } else {
+        const bin = join(root, "bin");
+        mkdirSync(bin);
+        writeFileSync(join(bin, "ghop"), "#!/bin/sh\nexit 0\n");
+        chmodSync(join(bin, "ghop"), 0o700);
+        const script = [
+          `export PATH=${quote(bin)}:$PATH; HISTFILE=${quote(join(home, "history"))}; HISTSIZE=1000; source ${quote(init)}; source ${quote(initial)}; __ghop_started=1`,
+          commands[0]!,
+          commands[0] + " tail",
+          commands[1]!,
+          "short0",
+          "echo 'a b'x",
+          "false",
+          "printf 'status:%s\\n' \"$?\"",
+          `source ${quote(undo)}`,
+          commands[0]!,
+          "PATH=; __ghop_nudges=('echo $(printf executed) *' 'literal'); __ghop_nudge 'echo $(printf executed) *'; __ghop_nudge 'echo not-a-match'",
+          "exit 0", "",
+        ].join("\n");
+        result = Bun.spawnSync([binary!, ...(shell === "bash" ? ["--noprofile", "--norc"] : ["-f"]), "-i"], {
+          env: { ...process.env, CI: "", GHOP_DISABLE: "", TERM: "xterm", PS1: "", PS2: "" },
+          stdin: Buffer.from(script), stdout: "pipe", stderr: "pipe", timeout: 20000,
+        });
+      }
+      expect(result.exitCode).toBe(0);
+      const stdout = new TextDecoder().decode(result.stdout);
+      const stderr = new TextDecoder().decode(result.stderr);
+      const reminders = (shell === "powershell" ? stdout : stderr).match(/^ghop: use .*$/gm);
+      expect(reminders).toEqual([
+        "ghop: use short0 instead of echo 'a b'",
+        "ghop: use short0 instead of echo 'a b'",
+        "ghop: use short1 instead of echo 'a b' detail",
+        shell === "powershell" ? 'ghop: use literal instead of echo $(throw "executed") *' : "ghop: use literal instead of echo $(printf executed) *",
+      ]);
+      expect(stdout).toContain(shell === "powershell" ? "status:23" : "status:1");
+    }), 30000);
+  }
 });

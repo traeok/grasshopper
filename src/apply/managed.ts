@@ -33,8 +33,11 @@ export function renderManaged(shell: Shell, rec: BlockRecommendation, lines: str
     replaced = true;
     return block;
   });
-  if (!content.startsWith(MANAGED_HEADER + "\n")) {
-    content = MANAGED_HEADER + "\n" + content;
+  const header = MANAGED_HEADER + "\n";
+  const reset = shell === "powershell" ? "$global:__ghop_nudges = @()\n" : "__ghop_nudges=()\n";
+  if (!content.startsWith(header)) content = header + content;
+  if (!content.startsWith(header + reset)) {
+    content = header + reset + content.slice(header.length);
   }
   if (!replaced) {
     if (!content.endsWith("\n")) content += "\n";

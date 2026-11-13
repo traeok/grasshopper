@@ -103,7 +103,15 @@ function prepareAction(rec: StoredRecommendation, ctx: AutomationContext): { act
     case "alias": {
       const command = resolve(action.command);
       requireSafeLines([command]);
-      return { action, lines: renderAlias(ctx.shell, action.name, command) };
+      const lines = renderAlias(ctx.shell, action.name, command);
+      // Literal data only: the prompt never evaluates the command or invokes ghop.
+      if (command.trim() && !/[\x00-\x1f\x7f-\x9f]/.test(command)) {
+        const quoted = command.replaceAll("'", ctx.shell === "powershell" ? "''" : "'\\''");
+        lines.push(ctx.shell === "powershell"
+          ? `$global:__ghop_nudges += @('${quoted}', '${action.name}')`
+          : `__ghop_nudges+=('${quoted}' '${action.name}')`);
+      }
+      return { action, lines };
     }
     case "snippet": {
       const lines = resolve(action.lines.join("\n")).split("\n");

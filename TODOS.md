@@ -2,7 +2,7 @@
 
 Improvements identified from a read of the source and one `analyze --dry-run`. The test suite was not run as part of this review.
 
-Suggested next work: item 3.
+Suggested next work: item 4.
 
 ## Fix first: unknown-command visibility and typo reporting (completed)
 
@@ -35,11 +35,11 @@ Implemented recommendations now carry observed per-alias adoption in analysis me
 - [x] Send that outcome in `memory`, with alias names pseudonymized against the current profile.
 - [x] Add closed-enum discard reasons to the CLI, storage and model memory; migrate legacy free text to `other`.
 
-### 3. Nudge in the moment
+### 3. Nudge in the moment (completed)
 
-Contact is currently one daily banner.
+Automatically accepted alias actions now write literal lookup entries alongside their managed definitions. Bash, Zsh and PowerShell print a one-line reminder at the next prompt when a recorded command uses the long form, including trailing arguments. Matching uses shell-native operations without an extra process or model request, respects history exclusions and prefers the longest matching form. Managed-file reloads clear stale entries on replacement or undo.
 
-- [ ] Write a lookup table into the managed shell file so the prompt hook prints a one-line reminder when the long form of an accepted alias is typed, with no process spawn.
+- [x] Write a lookup table into the managed shell file so the prompt hook prints a one-line reminder when the long form of an accepted alias is typed, with no process spawn.
 
 ## Trust and independence
 
