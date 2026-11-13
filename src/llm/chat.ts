@@ -8,7 +8,7 @@ import type { SensitiveLiteral } from "../privacy/literals.ts";
 import type { PseudonymMap } from "../privacy/pseudonyms.ts";
 import type { Profile } from "../profile/types.ts";
 import { loadPseudonyms } from "../recs/pseudonyms.ts";
-import { Status, type StoredRecommendation } from "../recs/store.ts";
+import { DiscardReason, Status, type StoredRecommendation } from "../recs/store.ts";
 import type { ChatMessage } from "./gateway.ts";
 import { CHAT_SYSTEM_PROMPT, GUIDE_SYSTEM_PROMPT } from "./prompts.ts";
 import { Action, Category } from "./schema.ts";
@@ -67,7 +67,11 @@ const ProfileSchema: z.ZodType<Profile> = z.object({
     z.object({ available: z.literal(true), basis: z.enum(["timestamps", "ingestion-days"]), recentDays: z.literal(7), baselineDays: z.literal(28),
       rising: z.array(trendItem), falling: z.array(trendItem), new: z.array(trendItem) }),
   ]),
-  memory: z.array(z.object({ category: Category, status: Status, evidence: z.array(z.string()), tool: z.string().nullable() })),
+  memory: z.array(z.object({
+    category: Category, status: Status, evidence: z.array(z.string()), tool: z.string().nullable(),
+    adoption: z.array(z.object({ a: z.string(), used: count, fullFormUsed: count })).default([]),
+    discardReason: DiscardReason.nullable().default(null),
+  })),
 });
 
 export function loadAnalysis(analysisId: string): ChatAnalysis | null {

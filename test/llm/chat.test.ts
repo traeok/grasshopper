@@ -68,11 +68,10 @@ test("extractActionProposal accepts CRLF and applies action schema defaults", ()
 });
 
 test("context includes only recommendation fields without an available analysis", () => {
-  const rec = recommendation({ discardReason: "local-only-note" });
+  const rec = recommendation({ discardReason: "not-relevant" });
   const value = context(rec, null);
   expect(value).toEqual({ recommendation: { key: rec.key, category: rec.category, title: rec.title, summary: rec.summary,
     rationale: rec.rationale, steps: rec.steps, action: rec.action, tool: rec.tool } });
-  expect(JSON.stringify(value)).not.toContain("local-only-note");
   expect(value).not.toHaveProperty("environment");
   expect(value).not.toHaveProperty("evidence");
 });
@@ -178,6 +177,23 @@ test("loadAnalysis returns typed stored profile and local pseudonyms, or null wh
     pseudonyms: { "<path#1>": { type: "path", value: "/fixture/private-zq-project" } } });
   openDb().query("UPDATE analyses SET profile = 'null' WHERE id = ?").run("fixture-analysis");
   expect(loadAnalysis("fixture-analysis")).toBeNull();
+}));
+
+test("loadAnalysis preserves adoption feedback and reads historical memory without it", () => withTempHome(() => {
+  const p = profile();
+  p.aliases = [{ a: "<alias#2>", expands: "git status", used: 3, fullFormUsed: 41 }];
+  p.memory = [
+    { category: "alias", status: "implemented", evidence: ["alias:<alias#2>"], tool: null,
+      adoption: [{ a: "<alias#2>", used: 3, fullFormUsed: 41 }], discardReason: null },
+    { category: "tip", status: "discarded", evidence: [], tool: null, adoption: [], discardReason: "not-now" },
+  ];
+  saveAnalysis(p);
+  expect(loadAnalysis("fixture-analysis")?.profile.memory).toEqual(p.memory);
+  const historical = { ...p, memory: [{ category: "tip", status: "discarded", evidence: [], tool: null }] };
+  openDb().query("UPDATE analyses SET profile = ? WHERE id = ?").run(JSON.stringify(historical), "fixture-analysis");
+  expect(loadAnalysis("fixture-analysis")?.profile.memory).toEqual([
+    { category: "tip", status: "discarded", evidence: [], tool: null, adoption: [], discardReason: null },
+  ]);
 }));
 
 test("loadAnalysis rejects malformed stored shapes and unsafe grammar, including extra properties", () => withTempHome(() => {

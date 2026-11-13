@@ -101,11 +101,13 @@ test("memory retains every status and filters references against current vocabul
   const existing = (["new", "accepted", "implemented", "discarded"] as const).map((status, index) => recommendation({
     id: index + 1, status,
     evidence: [stableRef("path:<path#1>", pseudonyms, salt), "signal:historyGrep", "signal:cdUp", "template:obsolete", "signal:historyGrep"],
-    discardReason: "local-only-reason",
+    discardReason: "not-now",
   }));
   const memory = buildMemory(profile(), existing, pseudonyms, salt);
-  expect(memory).toEqual(existing.map(row => ({ category: row.category, status: row.status, evidence: ["path:<path#1>", "signal:historyGrep"], tool: null })));
-  expect(JSON.stringify(memory)).not.toContain("local-only-reason");
+  expect(memory).toEqual(existing.map(row => ({
+    category: row.category, status: row.status, evidence: ["path:<path#1>", "signal:historyGrep"], tool: null,
+    adoption: [], discardReason: row.status === "discarded" ? "not-now" : null,
+  })));
   expect(existing[0]!.evidence).toHaveLength(5);
 });
 
@@ -115,7 +117,7 @@ test("memory recovers alias expansion evidence from the stable topic", () => {
     evidence: ["template:git status"],
   });
   expect(buildMemory(profile(), [row], pseudonyms, salt)).toEqual([
-    { category: "alias", status: "discarded", evidence: ["template:git status", "template:cd <path#1>"], tool: null },
+    { category: "alias", status: "discarded", evidence: ["template:git status", "template:cd <path#1>"], tool: null, adoption: [], discardReason: null },
   ]);
   const missing = recommendation({ topic: "alias:obsolete command" });
   expect(buildMemory(profile(), [missing], pseudonyms, salt)[0]!.evidence).toEqual([]);
@@ -150,7 +152,72 @@ test("memory caps at 80 after ranking and leaves input rows unchanged", () => {
   existing.push(recommendation({ category: "alias", evidence: ["template:git status"], updatedAt: "2020-01-01T00:00:00.000Z" }));
   const memory = buildMemory(profile(), existing, pseudonyms, salt);
   expect(memory).toHaveLength(80);
-  expect(memory[0]).toEqual({ category: "alias", status: "new", evidence: ["template:git status"], tool: null });
+  expect(memory[0]).toEqual({ category: "alias", status: "new", evidence: ["template:git status"], tool: null, adoption: [], discardReason: null });
   expect(existing).toHaveLength(86);
   expect(existing[0]!.id).toBe(1);
+});
+
+test("implemented applied aliases join current pseudonyms once and never infer extra action aliases", () => {
+  const current = profile();
+  current.aliases = [
+    { a: "<alias#7>", expands: "git status", used: 3, fullFormUsed: 41 },
+    { a: "<alias#2>", expands: "git diff", used: 0, fullFormUsed: 0 },
+    { a: "<alias#3>", expands: "git log", used: 8, fullFormUsed: 2 },
+  ];
+  const currentPseudonyms: PseudonymMap = {
+    "<alias#7>": pseudonyms["<alias#1>"]!,
+    "<alias#2>": { type: "alias", value: "second-private-alias" },
+    "<alias#3>": { type: "alias", value: "action-only-alias" },
+    "<alias#4>": { type: "alias", value: "unobserved-alias" },
+  };
+  const row = recommendation({
+    status: "implemented", shell: "zsh",
+    action: { type: "alias", name: "action-only-alias", command: "git log" },
+    evidence: [stableRef("alias:<alias#1>", pseudonyms, salt)],
+    applied: {
+      kind: "managed", shell: "bash", at: "2026-11-01",
+      aliasNames: ["private-shortcut", "second-private-alias", "private-shortcut", "unobserved-alias", "missing-alias"],
+      functionNames: [],
+    },
+  });
+  const before = JSON.stringify({ current, currentPseudonyms, row });
+  const memory = buildMemory(current, [row], currentPseudonyms, salt);
+  expect(memory).toEqual([{
+    category: "tip", status: "implemented", tool: null, discardReason: null,
+    evidence: ["alias:<alias#7>", "alias:<alias#2>"],
+    adoption: [{ a: "<alias#7>", used: 3, fullFormUsed: 41 }, { a: "<alias#2>", used: 0, fullFormUsed: 0 }],
+  }]);
+  const wire = JSON.stringify(memory);
+  for (const value of ["<alias#1>", ...Object.values(currentPseudonyms).map(value => value.value)]) expect(wire).not.toContain(value);
+  expect(JSON.stringify({ current, currentPseudonyms, row })).toBe(before);
+});
+
+test("manual done aliases require implemented status and matching shell and observations", () => {
+  const action = { type: "alias" as const, name: "private-shortcut", command: "git status" };
+  const implemented = recommendation({ status: "implemented", action });
+  expect(buildMemory(profile(), [implemented], pseudonyms, salt)[0]!.adoption)
+    .toEqual([{ a: "<alias#1>", used: 0, fullFormUsed: 12 }]);
+  const excluded = [
+    ...(["new", "accepted", "discarded"] as const).map(status => recommendation({ status, action })),
+    recommendation({ ...implemented, shell: "zsh" }),
+    recommendation({ ...implemented, action: { ...action, name: "missing-alias" } }),
+    recommendation({ ...implemented, applied: { kind: "managed", shell: "zsh", at: "2026-11-01", aliasNames: [action.name], functionNames: [] } }),
+    recommendation({ ...implemented, applied: { kind: "managed", shell: "bash", at: "2026-11-01", aliasNames: [], functionNames: [] } }),
+  ];
+  expect(buildMemory(profile(), excluded, pseudonyms, salt).every(item => item.adoption.length === 0)).toBe(true);
+  const missing = profile();
+  missing.aliases = [];
+  expect(buildMemory(missing, [implemented], pseudonyms, salt)[0]!.adoption).toEqual([]);
+});
+
+test("observed adoption keeps old implemented rows ahead of unrelated recent rows at the cap", () => {
+  const existing = Array.from({ length: 85 }, () => recommendation({ updatedAt: "2026-11-12" }));
+  existing.push(recommendation({
+    status: "implemented", updatedAt: "2020-01-01",
+    action: { type: "alias", name: "private-shortcut", command: "git status" },
+  }));
+  const memory = buildMemory(profile(), existing, pseudonyms, salt);
+  expect(memory).toHaveLength(80);
+  expect(memory[0]!.status).toBe("implemented");
+  expect(memory[0]!.adoption).toEqual([{ a: "<alias#1>", used: 0, fullFormUsed: 12 }]);
 });

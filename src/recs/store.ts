@@ -5,6 +5,8 @@ import { Action, Category, Level, ToolRef } from "../llm/schema.ts";
 
 export const Status = z.enum(["new", "accepted", "implemented", "discarded"]);
 export type Status = z.infer<typeof Status>;
+export const DiscardReason = z.enum(["not-relevant", "already-doing", "too-much-effort", "not-now", "other"]);
+export type DiscardReason = z.infer<typeof DiscardReason>;
 export const ToolVerification = z.object({
   status: z.enum(["verified", "unverified"]),
   license: z.string().nullable(),
@@ -20,7 +22,7 @@ const Applied = z.discriminatedUnion("kind", [
 export const StoredRecommendation = z.object({
   id: z.number().int().positive(), topic: z.string(), key: z.string(), actionKey: z.string().nullable(),
   analysisId: z.string(), createdAt: z.string(), updatedAt: z.string(), evidence: z.array(z.string()),
-  status: Status, seenAt: z.string().nullable(), acceptMode: z.enum(["self", "guided", "auto"]).nullable(), discardReason: z.string().nullable(),
+  status: Status, seenAt: z.string().nullable(), acceptMode: z.enum(["self", "guided", "auto"]).nullable(), discardReason: DiscardReason.nullable(),
   category: Category, title: z.string(), summary: z.string(), rationale: z.string(), steps: z.array(z.string()), impact: Level, effort: Level,
   tool: VerifiedTool.nullable(), action: Action.nullable(), shell: Shell, applied: Applied.nullable(),
 });

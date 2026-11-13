@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { GhopError } from "../../src/core/errors.ts";
-import { getRec, insertRecs, listRecs, topicExists, updateRec, type RecommendationInput, type Status } from "../../src/recs/store.ts";
+import { DiscardReason, getRec, insertRecs, listRecs, topicExists, updateRec, type RecommendationInput, type Status } from "../../src/recs/store.ts";
 import { withTempHome } from "../helpers/env.ts";
 
 function recommendation(topic = "alias:git status"): RecommendationInput {
@@ -37,7 +37,7 @@ describe("recommendation storage", () => {
     const [inserted] = insertRecs([recommendation()]);
     if (!inserted) throw new Error("Fixture recommendation was not inserted");
     const patch = {
-      status: "implemented" as const, acceptMode: "auto" as const, seenAt: "2026-02-01T00:00:00.000Z", discardReason: "Local reason",
+      status: "implemented" as const, acceptMode: "auto" as const, seenAt: "2026-02-01T00:00:00.000Z", discardReason: "already-doing" as const,
       evidence: ["template:cd <path:0123456789>", "signal:historyGrep"], steps: ["First", "Second"],
       tool: { name: "Fixture tool", npmPackage: "fixture-tool", verification: { status: "verified" as const, license: "MIT", checkedAt: "2026-02-01T00:00:00.000Z", checks: { npm: "verified" as const } } },
       action: { type: "snippet" as const, description: "Fixture snippet", lines: ["printf fixture"] },
@@ -59,5 +59,22 @@ describe("recommendation storage", () => {
   test("invalid batches insert nothing", () => withTempHome(() => {
     expect(() => insertRecs([recommendation("first"), { ...recommendation("second"), action: { type: "alias", name: "invalid name", command: "git status" } }])).toThrow();
     expect(listRecs()).toEqual([]);
+  }));
+
+  test("discard reasons accept only enum values or null without partially writing invalid input", () => withTempHome(() => {
+    const [inserted] = insertRecs([recommendation()]);
+    if (!inserted) throw new Error("Fixture recommendation was not inserted");
+    for (const reason of [...DiscardReason.options, null]) {
+      expect(updateRec(inserted.id, { discardReason: reason }).discardReason).toBe(reason);
+    }
+    const before = getRec(inserted.id);
+    const invalidReason = "private local reason" as RecommendationInput["discardReason"];
+    expect(() => updateRec(inserted.id, { status: "discarded", discardReason: invalidReason })).toThrow();
+    expect(getRec(inserted.id)).toEqual(before);
+    expect(() => insertRecs([
+      recommendation("valid-batch"),
+      { ...recommendation("invalid-batch"), discardReason: invalidReason },
+    ])).toThrow();
+    expect(listRecs()).toEqual([before]);
   }));
 });

@@ -8,6 +8,7 @@ import { readShellDumps } from "../../src/history/shell-dumps.ts";
 import { buildProfile } from "../../src/profile/build.ts";
 import { detectEnvironment } from "../../src/profile/environment.ts";
 import { validateProfile } from "../../src/privacy/egress.ts";
+import { StoredRecommendation } from "../../src/recs/store.ts";
 import { withTempHome } from "../helpers/env.ts";
 
 function build(entries: HistoryEntry[], which: (name: string) => string | null = () => null) {
@@ -164,4 +165,38 @@ test("PowerShell profiles retain useful grammar and aliases without exposing pri
   expect(stats.grammarSkips).toBe(0);
   const wire = JSON.stringify(profile);
   for (const value of ["PrivateListing", "private-value", "Private", "Folder", "Authorization"]) expect(wire).not.toContain(value);
+}));
+
+test("implemented alias memory carries measured history-window adoption without local names", () => withTempHome(() => {
+  const dumps = readShellDumps("bash");
+  dumps.aliases.push({ name: "privateShortcut", expansion: "git status" });
+  const entries = parseBash(new TextEncoder().encode([
+    ...Array(3).fill("privateShortcut"),
+    ...Array(41).fill("git status"),
+  ].join("\n")));
+  const existing = [StoredRecommendation.parse({
+    id: 1, topic: "alias:git status", key: "status-alias", actionKey: null,
+    analysisId: "old-analysis", createdAt: "2020-01-01", updatedAt: "2020-01-01",
+    evidence: [], status: "implemented", seenAt: null, acceptMode: "auto", discardReason: null,
+    category: "alias", title: "Shorten status", summary: "Use a shortcut.", rationale: "Frequent status checks.",
+    steps: [], impact: "medium", effort: "low", tool: null,
+    action: { type: "alias", name: "privateShortcut", command: "git status" },
+    shell: "zsh",
+    applied: { kind: "managed", at: "2020-01-01", shell: "bash", aliasNames: ["privateShortcut"], functionNames: [] },
+  })];
+  const { profile, pseudonyms } = buildProfile({
+    entries, source: { shell: "bash", file: "fixture" }, dumps,
+    ledger: { firstUntimedDay: null, days: {} }, existing, config: ConfigSchema.parse({}),
+    env: detectEnvironment("bash", dumps, () => null), fresh: entries, salt: "fixture-salt", which: () => null,
+  });
+  const alias = Object.entries(pseudonyms).find(([, literal]) => literal.type === "alias" && literal.value === "privateShortcut")![0];
+  expect(alias).toMatch(/^<alias#\d+>$/);
+  expect(profile.aliases).toContainEqual({ a: alias, expands: "git status", used: 3, fullFormUsed: 41 });
+  expect(profile.memory).toEqual([{
+    category: "alias", status: "implemented", evidence: ["template:git status", `alias:${alias}`],
+    tool: null, adoption: [{ a: alias, used: 3, fullFormUsed: 41 }], discardReason: null,
+  }]);
+  validateProfile(profile);
+  expect(JSON.stringify(profile)).not.toContain("privateShortcut");
+  expect(JSON.stringify(profile)).not.toContain("old-analysis");
 }));

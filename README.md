@@ -99,11 +99,15 @@ Automatic changes are available only for supported, validated actions—not arbi
 
 | Command | Purpose |
 | --- | --- |
-| `ghop discard <id>` | Dismiss a topic and remember not to suggest it again. |
+| `ghop discard <id> [--reason <reason>]` | Dismiss a topic and optionally record structured feedback. |
 | `ghop undo <id>` | Undo a Grasshopper-managed change; tool uninstalls require confirmation. |
 | `ghop daily` | Show the daily selection and run eligible background analysis. |
 | `ghop doctor` | Diagnose shell, history, and model-gateway setup. |
 | `ghop --help` | See all commands; add `--help` to a command for its options. |
+
+Implemented recommendations include per-alias adoption in the next analysis's `memory`: alias uses and full-form uses in the analyzed history window. Automatically applied alias names are matched to the current shell snapshot; manual `ghop done` can match a structured alias action by name. Alias names remain pseudonymized. These counts can include history from before implementation; they do not prove improvement. Missing aliases or shortcuts implemented as functions have no alias adoption observation, not a zero-use count. Inspect the outcome with `ghop analyze --dry-run`.
+
+Discard reasons are limited to `not-relevant`, `already-doing`, `too-much-effort`, `not-now`, and `other`, and are included in analysis memory. For example: `ghop discard 12 --reason not-now`. Omit `--reason` to leave it unset. Legacy free-text reasons are converted to `other`; their text is not sent.
 
 ## Privacy and local data
 

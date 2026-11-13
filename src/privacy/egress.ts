@@ -3,6 +3,7 @@ import { EgressBlockedError } from "../core/errors.ts";
 import { STATIC_SYSTEM_PROMPTS } from "../llm/prompts.ts";
 import { evidenceVocabulary } from "../profile/evidence.ts";
 import type { Profile } from "../profile/types.ts";
+import { DiscardReason } from "../recs/store.ts";
 import { FILE_EXTENSIONS, PUBLIC_HOSTS, isKnownWord } from "./dictionary.ts";
 import { findHighEntropyTokens } from "./entropy.ts";
 import { isSafeString } from "./grammar.ts";
@@ -45,6 +46,10 @@ function validTypo(typed: string, meant: string): boolean {
 export function validateProfile(profile: Profile): void {
   const vocabulary = evidenceVocabulary(profile);
   const visit = (value: unknown, path: string, parts: (string | number)[], parent?: Record<string, unknown>): void => {
+    if (parts.length === 3 && parts[0] === "memory" && typeof parts[1] === "number" && parts[2] === "discardReason") {
+      if (value !== null && !DiscardReason.safeParse(value).success) throw new EgressBlockedError([`grammar:${path}`]);
+      return;
+    }
     if (typeof value === "string") {
       let safe: boolean;
       if (parts.length === 3 && parts[0] === "typos" && typeof parts[1] === "number" && parts[2] === "typed") {
@@ -53,6 +58,9 @@ export function validateProfile(profile: Profile): void {
         safe = vocabulary.has(value);
       } else if (parts.length === 3 && parts[0] === "memory" && typeof parts[1] === "number" && parts[2] === "tool") {
         safe = /^(gh|npm|winget|brew):[A-Za-z0-9@._/+-]{1,214}$/.test(value);
+      } else if (parts.length === 5 && parts[0] === "memory" && typeof parts[1] === "number" && parts[2] === "adoption"
+        && typeof parts[3] === "number" && parts[4] === "a") {
+        safe = /^<alias#[1-9]\d{0,2}>$/.test(value) && vocabulary.has(`alias:${value}`);
       } else safe = isSafeString(value);
       if (!safe) throw new EgressBlockedError([`grammar:${path}`]);
     } else if (Array.isArray(value)) {

@@ -58,14 +58,27 @@ function isCorruption(error: unknown): boolean {
     || /\bSQLITE_(?:CORRUPT|NOTADB)\b|file is not a database|database disk image is malformed/i.test(error.message);
 }
 
+function initializeDb(db: Database): void {
+  db.transaction(() => {
+    db.exec(SCHEMA);
+    db.query("INSERT INTO meta (key, value) VALUES ('schemaVersion', '1') ON CONFLICT(key) DO NOTHING").run();
+    const version = db.query<{ value: string }, []>("SELECT value FROM meta WHERE key = 'schemaVersion'").get();
+    if (version?.value === "1") {
+      db.exec(`
+        UPDATE recommendations SET discard_reason = 'other'
+        WHERE discard_reason IS NOT NULL
+          AND discard_reason NOT IN ('not-relevant', 'already-doing', 'too-much-effort', 'not-now', 'other');
+        UPDATE meta SET value = '2' WHERE key = 'schemaVersion';
+      `);
+    }
+  }).immediate();
+}
+
 function createDb(file: string): Database {
   const db = new Database(file, { create: true, strict: true });
   try {
     db.exec("PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000; PRAGMA foreign_keys=ON;");
-    db.transaction(() => {
-      db.exec(SCHEMA);
-      db.query("INSERT INTO meta (key, value) VALUES ('schemaVersion', '1') ON CONFLICT(key) DO NOTHING").run();
-    }).immediate();
+    initializeDb(db);
     return db;
   } catch (error) {
     db.close();
@@ -123,6 +136,8 @@ export async function withStateSnapshot<T>(fn: () => Promise<T>): Promise<T> {
       db = Database.deserialize(image);
     } finally { source.close(); }
   } else db = new Database(":memory:");
-  db.exec(SCHEMA);
-  try { return await withReadOnlyFiles(() => snapshot.run(db, fn)); } finally { db.close(); }
+  try {
+    initializeDb(db);
+    return await withReadOnlyFiles(() => snapshot.run(db, fn));
+  } finally { db.close(); }
 }

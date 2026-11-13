@@ -117,11 +117,12 @@ test("analysis stores three valid canned items, scrubs unknown placeholders, gua
 test("discarded alias memory survives rewording and a different alias name, with canonical tool memory", async () => {
   await fixture(async f => {
     const first = await f.run();
-    updateRec(first.find(item => item.category === "alias")!.id, { status: "discarded" });
+    updateRec(first.find(item => item.category === "alias")!.id, { status: "discarded", discardReason: "not-relevant" });
     f.respond([{ ...canned[0], key: "status-shortcut-renamed", title: "Check status faster", action: { type: "alias", name: "gst", command: "git status" } }, canned[1]]);
     expect(await f.run()).toHaveLength(0);
     const memory = requestProfile(f.requests()[1]!.messages).memory;
-    expect(memory).toContainEqual(expect.objectContaining({ category: "alias", status: "discarded", evidence: expect.arrayContaining(["template:git status"]) }));
+    expect(memory).toContainEqual(expect.objectContaining({ category: "alias", status: "discarded", discardReason: "not-relevant",
+      adoption: [], evidence: expect.arrayContaining(["template:git status"]) }));
     expect(memory).toContainEqual(expect.objectContaining({ category: "tool", tool: "npm:npm-check-updates" }));
   });
 });

@@ -2,7 +2,7 @@
 
 Improvements identified from a read of the source and one `analyze --dry-run`. The test suite was not run as part of this review.
 
-Suggested order for the remaining work: items 2 and 3 together.
+Suggested next work: item 3.
 
 ## Fix first: unknown-command visibility and typo reporting (completed)
 
@@ -27,13 +27,13 @@ The Bash, Zsh and PowerShell hooks now record metadata-only command fingerprints
 - [x] Use the new data for fail-then-retry patterns, exact typos (exit 127), per-project workflows and slow-command detection on every shell.
 - [x] Read Atuin's SQLite database as a history source for users who already have it.
 
-### 2. Measure adoption
+### 2. Measure adoption (completed)
 
-`ghop done` only flips a status, and `applied.aliasNames` is used only by undo.
+Implemented recommendations now carry observed per-alias adoption in analysis memory. Counts cover the analyzed history window, not necessarily only commands since implementation; missing observations are not treated as zero usage.
 
-- [ ] Join the per-alias `used` and `fullFormUsed` counts the profile already computes to implemented recommendations ("`gs` used 3 times, full form typed 41 times").
-- [ ] Send that outcome in `memory`, which today carries only category, status, evidence and tool.
-- [ ] Add a closed-enum discard reason; the free-text `discardReason` is never sent to the model.
+- [x] Join the per-alias `used` and `fullFormUsed` counts the profile already computes to implemented recommendations ("`gs` used 3 times, full form typed 41 times").
+- [x] Send that outcome in `memory`, with alias names pseudonymized against the current profile.
+- [x] Add closed-enum discard reasons to the CLI, storage and model memory; migrate legacy free text to `other`.
 
 ### 3. Nudge in the moment
 

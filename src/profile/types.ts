@@ -1,7 +1,7 @@
 import type { Shell } from "../history/source.ts";
 import type { Category } from "../llm/schema.ts";
 import type { DropCategory } from "../privacy/classify.ts";
-import type { Status } from "../recs/store.ts";
+import type { DiscardReason, Status } from "../recs/store.ts";
 import type { RedFlagKind } from "./red-flags.ts";
 import type { SignalName } from "./signals.ts";
 
@@ -63,7 +63,11 @@ export interface Profile {
   signals: Record<SignalName, number>;
   redFlags: { kind: RedFlagKind; n: number }[]; // Only positive counts.
   trends: Trends;
-  memory: { category: Category; status: Status; evidence: string[]; tool: string | null }[]; // At most 80, all statuses.
+  memory: {
+    category: Category; status: Status; evidence: string[]; tool: string | null;
+    adoption: { a: string; used: number; fullFormUsed: number }[]; // Observed window counts, not post-implementation attribution.
+    discardReason: DiscardReason | null;
+  }[]; // At most 80, all statuses.
 }
 
 export interface AnalysisStats {

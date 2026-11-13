@@ -59,6 +59,12 @@ export function buildMemory(
   salt: string,
 ): Profile["memory"] {
   const vocabulary = evidenceVocabulary(profile);
+  const aliasesById = new Map(profile.aliases.map(alias => [alias.a, alias]));
+  const aliasesByName = new Map<string, Profile["aliases"][number]>();
+  for (const [id, literal] of Object.entries(pseudonyms)) {
+    const alias = aliasesById.get(id);
+    if (literal.type === "alias" && alias) aliasesByName.set(literal.value, alias);
+  }
   return existing.map((row) => {
     const evidence = new Set<string>();
     for (const stable of row.evidence) {
@@ -69,14 +75,31 @@ export function buildMemory(
       const ref = `template:${renderStableRef(row.topic.slice("alias:".length), pseudonyms, salt)}`;
       if (vocabulary.has(ref)) evidence.add(ref);
     }
+    const adoption: Profile["memory"][number]["adoption"] = [];
+    if (row.status === "implemented") {
+      const shell = row.applied?.shell ?? row.shell;
+      const names = row.applied ? row.applied.aliasNames : row.action?.type === "alias" ? [row.action.name] : [];
+      if (shell === profile.environment.shell) {
+        for (const name of new Set(names)) {
+          const alias = aliasesByName.get(name);
+          if (!alias) continue;
+          adoption.push({ a: alias.a, used: alias.used, fullFormUsed: alias.fullFormUsed });
+          const ref = `alias:${alias.a}`;
+          if (vocabulary.has(ref)) evidence.add(ref);
+        }
+      }
+    }
     const canonical = canonicalTool(row.tool);
     return {
       updatedAt: row.updatedAt,
-      item: { category: row.category, status: row.status, evidence: [...evidence], tool: canonical },
+      item: {
+        category: row.category, status: row.status, evidence: [...evidence], tool: canonical, adoption,
+        discardReason: row.status === "discarded" ? row.discardReason : null,
+      },
     };
   }).sort((a, b) => {
-    const aRelevant = a.item.evidence.length > 0 || a.item.tool !== null;
-    const bRelevant = b.item.evidence.length > 0 || b.item.tool !== null;
+    const aRelevant = a.item.adoption.length > 0 || a.item.evidence.length > 0 || a.item.tool !== null;
+    const bRelevant = b.item.adoption.length > 0 || b.item.evidence.length > 0 || b.item.tool !== null;
     return Number(bRelevant) - Number(aRelevant) || (a.updatedAt < b.updatedAt ? 1 : a.updatedAt > b.updatedAt ? -1 : 0);
   }).slice(0, 80).map(({ item }) => item);
 }

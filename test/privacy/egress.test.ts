@@ -47,7 +47,7 @@ describe("profile wire grammar", () => {
     const profile = fixtureProfile();
     profile.typos = [{ typed: "gti", meant: "git", n: 2 }, { typed: "git psuh", meant: "git push", n: 2 }];
     profile.memory = ["gh:owner/public-tool", "npm:@scope/public-tool", "winget:Vendor.PublicTool", "brew:public-tool@2"].map(tool => ({
-      category: "tool", status: "discarded", evidence: ["template:git status", "history:ignoreSpace"], tool,
+      category: "tool", status: "discarded", evidence: ["template:git status", "history:ignoreSpace"], tool, adoption: [], discardReason: "not-relevant",
     }));
     expect(() => validateProfile(profile)).not.toThrow();
   }));
@@ -79,17 +79,43 @@ describe("profile wire grammar", () => {
   test("memory evidence must be current and public identifiers match the exact grammar", () => withTempHome(() => {
     for (const evidence of ["signal:doesNotExist", "template:git acmecorp", "history:shared"]) {
       const profile = fixtureProfile();
-      profile.memory = [{ category: "tip", status: "new", evidence: [evidence], tool: null }];
+      profile.memory = [{ category: "tip", status: "new", evidence: [evidence], tool: null, adoption: [], discardReason: null }];
       expect(blockedCategories(() => validateProfile(profile))).toEqual(["grammar:$.memory[0].evidence[0]"]);
     }
     for (const tool of ["https://internal.example/tool", "npm:private tool", "npm:", `npm:${"a".repeat(215)}`]) {
       const profile = fixtureProfile();
-      profile.memory = [{ category: "tool", status: "new", evidence: [], tool }];
+      profile.memory = [{ category: "tool", status: "new", evidence: [], tool, adoption: [], discardReason: null }];
       expect(blockedCategories(() => validateProfile(profile))).toEqual(["grammar:$.memory[0].tool"]);
     }
     const profile = fixtureProfile();
     profile.templates[0]!.t = "npm:@scope/public-tool";
     expect(() => validateProfile(profile)).toThrow(EgressBlockedError);
+  }));
+
+  test("adoption uses current alias placeholders and discard reasons stay in the closed enum", () => withTempHome(() => {
+    const profile = fixtureProfile();
+    profile.aliases = [{ a: "<alias#2>", expands: "git status", used: 3, fullFormUsed: 41 }];
+    const adoption = { a: "<alias#2>", used: 3, fullFormUsed: 41 };
+    profile.memory = [{ category: "alias", status: "implemented", evidence: ["alias:<alias#2>"], tool: null,
+      adoption: [adoption], discardReason: null }];
+    validateProfile(profile);
+    assertOutboundSafe([{ role: "user", content: JSON.stringify(profile) }], { literals: [] });
+    for (const a of ["git", "private-shortcut", "<alias#1>", "<path#2>"]) {
+      adoption.a = a;
+      expect(blockedCategories(() => validateProfile(profile))).toEqual(["grammar:$.memory[0].adoption[0].a"]);
+    }
+    adoption.a = "<alias#2>";
+    const item = profile.memory[0]!;
+    item.adoption = [];
+    item.status = "discarded";
+    for (const reason of ["not-relevant", "already-doing", "too-much-effort", "not-now", "other"] as const) {
+      item.discardReason = reason;
+      validateProfile(profile);
+    }
+    for (const reason of ["git", "private reason", 42, false, { reason: "not-now" }]) {
+      Object.assign(item, { discardReason: reason });
+      expect(blockedCategories(() => validateProfile(profile))).toEqual(["grammar:$.memory[0].discardReason"]);
+    }
   }));
 });
 

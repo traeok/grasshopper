@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import { existsSync, readdirSync, writeFileSync } from "node:fs";
+import { Database } from "bun:sqlite";
+import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { closeDb, openDb, tx } from "../../src/core/db.ts";
+import { closeDb, openDb, tx, withStateSnapshot } from "../../src/core/db.ts";
 import { dbFile } from "../../src/core/paths.ts";
 import { getMeta, getWatermark, setMeta, setWatermark } from "../../src/core/state.ts";
 import { withTempHome } from "../helpers/env.ts";
@@ -17,6 +18,24 @@ function insertRecommendation(topic: string): number {
   `).run(topic).changes;
 }
 
+function seedLegacyDiscardReasons() {
+  const reasons = ["not-relevant", "already-doing", "too-much-effort", "not-now", "other", "private legacy reason", "", null];
+  const statuses = ["new", "accepted", "implemented", "discarded"];
+  const legacy = reasons.map((discard_reason, index) => ({
+    topic: `legacy-${index}`, status: statuses[index % statuses.length]!, discard_reason,
+  }));
+  const db = openDb();
+  for (const row of legacy) {
+    insertRecommendation(row.topic);
+    db.query("UPDATE recommendations SET status = ?, discard_reason = ? WHERE topic = ?")
+      .run(row.status, row.discard_reason, row.topic);
+  }
+  db.query("UPDATE meta SET value = '1' WHERE key = 'schemaVersion'").run();
+  const migrated = legacy.map((row, index) => ({ ...row, discard_reason: index === 5 || index === 6 ? "other" : row.discard_reason }));
+  closeDb();
+  return { legacy, migrated };
+}
+
 describe("SQLite storage", () => {
   test("reuses the open handle and enables required pragmas", () => withTempHome(() => {
     const db = openDb();
@@ -24,7 +43,33 @@ describe("SQLite storage", () => {
     expect(db.query("PRAGMA journal_mode").get()).toEqual({ journal_mode: "wal" });
     expect(db.query("PRAGMA busy_timeout").get()).toEqual({ timeout: 5000 });
     expect(db.query("PRAGMA foreign_keys").get()).toEqual({ foreign_keys: 1 });
-    expect(db.query("SELECT value FROM meta WHERE key = 'schemaVersion'").get()).toEqual({ value: "1" });
+    expect(db.query("SELECT value FROM meta WHERE key = 'schemaVersion'").get()).toEqual({ value: "2" });
+  }));
+
+  test("migrates legacy discard reasons once, preserving known reasons, nulls and statuses", () => withTempHome(() => {
+    const { migrated } = seedLegacyDiscardReasons();
+    const db = openDb();
+    expect(db.query("SELECT topic, status, discard_reason FROM recommendations ORDER BY topic").all()).toEqual(migrated);
+    expect(db.query("SELECT value FROM meta WHERE key = 'schemaVersion'").get()).toEqual({ value: "2" });
+    db.query("UPDATE recommendations SET discard_reason = 'later raw value' WHERE topic = 'legacy-5'").run();
+    closeDb();
+    expect(openDb().query("SELECT discard_reason FROM recommendations WHERE topic = 'legacy-5'").get())
+      .toEqual({ discard_reason: "later raw value" });
+  }));
+
+  test("migrates legacy snapshots in memory without changing the disk database", () => withTempHome(async () => {
+    const { legacy, migrated } = seedLegacyDiscardReasons();
+    const before = readFileSync(dbFile());
+    await withStateSnapshot(async () => {
+      expect(openDb().query("SELECT topic, status, discard_reason FROM recommendations ORDER BY topic").all()).toEqual(migrated);
+      expect(openDb().query("SELECT value FROM meta WHERE key = 'schemaVersion'").get()).toEqual({ value: "2" });
+    });
+    expect(readFileSync(dbFile())).toEqual(before);
+    const disk = new Database(dbFile(), { readonly: true });
+    try {
+      expect(disk.query("SELECT topic, status, discard_reason FROM recommendations ORDER BY topic").all()).toEqual(legacy);
+      expect(disk.query("SELECT value FROM meta WHERE key = 'schemaVersion'").get()).toEqual({ value: "1" });
+    } finally { disk.close(); }
   }));
 
   test("enforces permanent topic uniqueness in SQLite", () => withTempHome(() => {
@@ -65,7 +110,7 @@ describe("SQLite storage", () => {
     expect(getMeta("lastAnalysisAt")).toBeNull();
     expect(existsSync(file)).toBe(true);
     expect(readdirSync(dirname(file)).filter((name) => /^ghop\.db\.corrupt-\d+$/.test(name))).toHaveLength(1);
-    expect(openDb().query("SELECT value FROM meta WHERE key = 'schemaVersion'").get()).toEqual({ value: "1" });
+    expect(openDb().query("SELECT value FROM meta WHERE key = 'schemaVersion'").get()).toEqual({ value: "2" });
   }));
 
   test("switches memoized handles when the data-directory path changes", () => withTempHome(() => {

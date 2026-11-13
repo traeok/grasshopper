@@ -77,7 +77,7 @@ describe("review commands", () => {
     } finally { output.mockRestore(); }
   }));
 
-  test("discard and done support only open-state transitions, and reason stays local", () => withTempHome(async () => {
+  test("discard and done support only open-state transitions and enum discard reasons", () => withTempHome(async () => {
     const rows = insertRecs([
       recommendation("discard-new"), recommendation("discard-accepted", { status: "accepted" }),
       recommendation("done-new"), recommendation("done-accepted", { status: "accepted" }),
@@ -85,9 +85,9 @@ describe("review commands", () => {
     ]);
     const output = spyOn(console, "log").mockImplementation(() => {});
     try {
-      await program().parseAsync(["discard", String(rows[0]!.id), "--reason", "private local reason"], { from: "user" });
-      expect(getRec(rows[0]!.id)).toMatchObject({ status: "discarded", discardReason: "private local reason" });
-      expect(performDiscard(rows[1]!.id).status).toBe("discarded");
+      await program().parseAsync(["discard", String(rows[0]!.id), "--reason", "not-relevant"], { from: "user" });
+      expect(getRec(rows[0]!.id)).toMatchObject({ status: "discarded", discardReason: "not-relevant" });
+      expect(performDiscard(rows[1]!.id)).toMatchObject({ status: "discarded", discardReason: null });
       await program().parseAsync(["done", String(rows[2]!.id)], { from: "user" });
       expect(getRec(rows[2]!.id).status).toBe("implemented");
       expect(performDone(rows[3]!.id).status).toBe("implemented");
@@ -96,6 +96,24 @@ describe("review commands", () => {
       expect(() => performDone(rows[4]!.id)).toThrow(GhopError);
       expect(() => performDone(rows[5]!.id)).toThrow(GhopError);
       expect(output.mock.calls.map((call) => call[0])).toEqual([PHRASES.discarded, PHRASES.discarded, PHRASES.done, PHRASES.done]);
+    } finally { output.mockRestore(); }
+  }));
+
+  test("invalid CLI and direct discard reasons leave recommendations unchanged", () => withTempHome(async () => {
+    const rows = insertRecs([recommendation("invalid-new"), recommendation("invalid-accepted", { status: "accepted" })]);
+    const output = spyOn(console, "log").mockImplementation(() => {});
+    try {
+      for (const row of rows) {
+        for (const reason of ["private local reason", "", "NOT-NOW"]) {
+          const cli = program().configureOutput({ writeErr: () => {} });
+          await expect(cli.parseAsync(["discard", String(row.id), "--reason", reason], { from: "user" })).rejects.toThrow(/allowed choices/i);
+          expect(getRec(row.id)).toEqual(row);
+          expect(() => performDiscard(row.id, reason)).toThrow("Invalid discard reason. Choose one of:");
+          expect(getRec(row.id)).toEqual(row);
+        }
+      }
+      expect(output.mock.calls).toEqual([]);
+      expect(performDiscard(rows[0]!.id, null)).toMatchObject({ status: "discarded", discardReason: null });
     } finally { output.mockRestore(); }
   }));
 
